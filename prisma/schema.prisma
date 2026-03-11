@@ -1,0 +1,99 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id        String     @id @default(cuid())
+  email     String     @unique
+  name      String?
+  password  String
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  campaigns   Campaign[]
+  emails      EmailRecord[]
+  uploads     FileUpload[]
+
+  @@map("users")
+}
+
+// Campaign Model - Groups of prospects
+model Campaign {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name      String
+  type      String     // "prospection" or "coaching"
+  description String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+
+  prospects EmailRecord[]
+
+  @@map("campaigns")
+}
+
+// File Upload Model
+model FileUpload {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  fileName  String
+  fileUrl   String
+  type      String     // "prospection" or "coaching"
+  uploadedAt DateTime  @default(now())
+  
+  records   EmailRecord[]
+
+  @@map("file_uploads")
+}
+
+// Email Record Model - Each prospect email
+model EmailRecord {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  campaignId String?
+  campaign   Campaign?  @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  
+  fileUploadId String?
+  fileUpload   FileUpload? @relation(fields: [fileUploadId], references: [id], onDelete: SetNull)
+
+  // Prospect Info
+  prospectName String
+  prospectEmail String
+  companyName  String
+  companyType  String   // Industry/Type detected from company
+  
+  // Email Content
+  emailSubject String
+  emailBody    String
+  emailPreview String?  // Preview of email content
+  
+  // Status Info
+  status      String    @default("pending") // "pending", "sent", "opened", "replied", "bounced"
+  sentAt      DateTime?
+  repliedAt   DateTime?
+  replyContent String?
+  
+  // Analytics
+  openedCount Int       @default(0)
+  clickedCount Int      @default(0)
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("email_records")
+}

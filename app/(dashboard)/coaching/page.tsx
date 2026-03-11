@@ -1,0 +1,279 @@
+'use client';
+
+import { useState } from 'react';
+import { Upload, Eye, AlertCircle, X } from 'lucide-react';
+import * as XLSX from 'xlsx';
+
+interface EmailRecord {
+  id: string;
+  prospectName: string;
+  prospectEmail: string;
+  companyName: string;
+  fonction: string;
+  linkedinUrl?: string;
+  siteWeb?: string;
+  status: 'pending' | 'sent' | 'replied';
+  sentAt?: string;
+  emailSubject: string;
+  emailBody: string;
+}
+
+export default function CoachingPage() {
+  const [file, setFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [emails, setEmails] = useState<EmailRecord[]>([]);
+  const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
+  const [showPreview, setShowPreview] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+
+  const generateEmail = (prenom: string, societe: string, fonction: string): { subject: string; body: string } => {
+    const firstName = prenom || 'Madame/Monsieur';
+    const company = societe || 'votre entreprise';
+    const role = fonction ? ` en tant que ${fonction}` : '';
+
+    const templates = [
+      {
+        subject: `${company} × Coaching.com — Développez votre potentiel`,
+        body: `Bonjour ${firstName},
+
+Je vous contacte car ${company}${role} est exactement le profil que nous accompagnons sur Coaching.com.
+
+Notre plateforme offre un accompagnement complet pour les professionnels ambitieux :
+• Sessions 1:1 avec des coachs certifiés
+• Programmes de leadership et développement personnel
+• Suivi de progression et bilans réguliers
+• Communauté de 1800+ coachs experts
+
+Seriez-vous disponible(e) pour un échange de 20 min cette semaine ?
+
+Cordialement,
+[Votre nom]
+Coaching.com`,
+      },
+      {
+        subject: `Boostez votre développement professionnel — ${company}`,
+        body: `Bonjour ${firstName},
+
+J'ai regardé votre parcours chez ${company} et je pense que le coaching professionnel peut vraiment faire la différence à votre niveau.
+
+Coaching.com connecte les professionnels avec les meilleurs coachs certifiés pour :
+• Accélérer leur évolution de carrière
+• Renforcer leur leadership
+• Gérer les transitions professionnelles
+• Développer leur impact
+
+Un échange rapide pour voir si c'est pertinent pour vous ?
+
+Cordialement,
+[Votre nom]
+Coaching.com`,
+      },
+    ];
+
+    return templates[Math.floor(Math.random() * templates.length)];
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const uploadedFile = e.target.files?.[0];
+    if (!uploadedFile) return;
+
+    setFile(uploadedFile);
+    setUploading(true);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
+        const sheet = workbook.Sheets[workbook.SheetNames[0]];
+        const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        const parsed: EmailRecord[] = rows
+          .filter((row) => {
+            const emailVal = row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '';
+            return emailVal.toString().includes('@');
+          })
+          .map((row, index) => {
+            const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
+            const nom = (row['Nom'] || row['NOM'] || '').toString().trim();
+            const societe = (row['Société'] || row['Societe'] || row['société'] || row['SOCIÉTÉ'] || '').toString().trim();
+            const fonction = (row['Fonction'] || row['FONCTION'] || row['fonction'] || '').toString().trim();
+            const email = (row['Email 1'] || row['Email'] || row['email'] || '').toString().trim();
+            const linkedin = (row['URL LinkedIn'] || row['LinkedIn'] || row['Linkedin'] || '').toString().trim();
+            const site = (row['Site Internet'] || row['Site Web'] || row['Website'] || '').toString().trim();
+            const fullName = [prenom, nom].filter(Boolean).join(' ') || 'Prospect';
+            const { subject, body } = generateEmail(prenom, societe, fonction);
+
+            return {
+              id: `row-${index}`,
+              prospectName: fullName,
+              prospectEmail: email,
+              companyName: societe || '—',
+              fonction,
+              linkedinUrl: linkedin || undefined,
+              siteWeb: site || undefined,
+              status: 'pending',
+              emailSubject: subject,
+              emailBody: body,
+            } satisfies EmailRecord;
+          });
+
+        setEmails(parsed);
+      } catch (err) {
+        console.error('Erreur lecture XLSX', err);
+        alert("Impossible de lire le fichier. Vérifiez que c'est bien un .xlsx valide.");
+      } finally {
+        setUploading(false);
+      }
+    };
+    reader.readAsBinaryString(uploadedFile);
+  };
+
+  const handleSendEmail = (email: EmailRecord) => {
+    setSendingEmail(true);
+    setTimeout(() => {
+      setEmails(emails.map(e =>
+        e.id === email.id
+          ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') }
+          : e
+      ));
+      setSendingEmail(false);
+    }, 1000);
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'pending': return { bg: '#fef9c3', color: '#854d0e' };
+      case 'sent': return { bg: '#dcfce7', color: '#166534' };
+      case 'replied': return { bg: '#dbeafe', color: '#1e40af' };
+      default: return { bg: '#f1f5f9', color: '#475569' };
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    switch (status) {
+      case 'pending': return 'En attente';
+      case 'sent': return 'Envoyé';
+      case 'replied': return 'Réponse';
+      default: return status;
+    }
+  };
+
+  return (
+    <div style={{ padding: '2rem' }}>
+      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', marginBottom: '1.5rem' }}>Prospection Coaching</h1>
+
+      {/* Upload Section */}
+      <div style={{ background: 'white', borderRadius: '0.875rem', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: '1.5rem', border: '2px dashed #bbf7d0' }}>
+        <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.5rem' }}>Importer une liste XLSX</h2>
+        <p style={{ color: '#64748b', marginBottom: '0.75rem', fontSize: '0.9375rem' }}>Colonnes reconnues : <strong>Prénom, Nom, Fonction, Société, Email 1</strong>, URL LinkedIn, Site Internet.</p>
+
+        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '1.5rem', border: '2px dashed #cbd5e1', borderRadius: '0.5rem', cursor: 'pointer' }}>
+          <Upload size={24} color="#94a3b8" />
+          <div>
+            <p style={{ fontWeight: 600, color: '#374151' }}>{file ? file.name : 'Cliquez pour sélectionner un fichier'}</p>
+            <p style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>Format: .xlsx</p>
+          </div>
+          <input type="file" accept=".xlsx,.xls" onChange={handleFileUpload} style={{ display: 'none' }} />
+        </label>
+
+        {uploading && (
+          <p style={{ marginTop: '1rem', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>Lecture du fichier et génération des emails...</p>
+        )}
+      </div>
+
+      {/* Stats bar */}
+      {emails.length > 0 && (
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+          {[
+            { label: 'Total', value: emails.length, color: '#16a34a' },
+            { label: 'En attente', value: emails.filter(e => e.status === 'pending').length, color: '#d97706' },
+            { label: 'Envoyés', value: emails.filter(e => e.status === 'sent').length, color: '#2563eb' },
+            { label: 'Réponses', value: emails.filter(e => e.status === 'replied').length, color: '#7c3aed' },
+          ].map(stat => (
+            <div key={stat.label} style={{ background: 'white', borderRadius: '0.75rem', padding: '0.875rem 1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.25rem', minWidth: '100px' }}>
+              <span style={{ fontSize: '1.5rem', fontWeight: 800, color: stat.color }}>{stat.value}</span>
+              <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{stat.label}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Modal Preview */}
+      {showPreview && selectedEmail && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '1rem' }}>
+          <div style={{ background: 'white', borderRadius: '1rem', padding: '2rem', width: '100%', maxWidth: '640px', maxHeight: '90vh', overflowY: 'auto', boxShadow: '0 25px 60px rgba(0,0,0,0.3)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div>
+                <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e293b' }}>{selectedEmail.prospectName}</h3>
+                <p style={{ fontSize: '0.875rem', color: '#64748b' }}>{selectedEmail.fonction && `${selectedEmail.fonction} · `}{selectedEmail.companyName}</p>
+              </div>
+              <button onClick={() => setShowPreview(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: '0.25rem' }}><X size={20} /></button>
+            </div>
+            <div style={{ background: '#f8fafc', borderRadius: '0.5rem', padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+              <p style={{ fontSize: '0.875rem', color: '#64748b' }}>À : <strong style={{ color: '#1e293b' }}>{selectedEmail.prospectEmail}</strong></p>
+              <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Sujet : <strong style={{ color: '#1e293b' }}>{selectedEmail.emailSubject}</strong></p>
+              {selectedEmail.linkedinUrl && (
+                <a href={selectedEmail.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', color: '#2563eb' }}>🔗 LinkedIn</a>
+              )}
+              {selectedEmail.siteWeb && (
+                <a href={selectedEmail.siteWeb} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', color: '#2563eb' }}>🌐 {selectedEmail.siteWeb}</a>
+              )}
+            </div>
+            <div style={{ background: '#f8fafc', borderRadius: '0.5rem', padding: '1rem', whiteSpace: 'pre-wrap', color: '#374151', fontSize: '0.9375rem', lineHeight: 1.6, marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
+              {selectedEmail.emailBody}
+            </div>
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <button onClick={() => { handleSendEmail(selectedEmail); setShowPreview(false); }} disabled={sendingEmail || selectedEmail.status !== 'pending'}
+                style={{ flex: 1, padding: '0.875rem', background: selectedEmail.status !== 'pending' ? '#cbd5e1' : 'linear-gradient(to right, #16a34a, #059669)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 600, cursor: selectedEmail.status !== 'pending' ? 'not-allowed' : 'pointer' }}>
+                {sendingEmail ? 'Envoi...' : 'Envoyer'}
+              </button>
+              <button onClick={() => setShowPreview(false)} style={{ flex: 1, padding: '0.875rem', background: '#f1f5f9', color: '#374151', border: 'none', borderRadius: '0.5rem', fontWeight: 600, cursor: 'pointer' }}>Fermer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email List */}
+      {emails.length > 0 && (
+        <div>
+          <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem' }}>
+            Emails générés — {emails.length} prospect{emails.length > 1 ? 's' : ''}
+          </h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+            {emails.map((email) => {
+              const s = getStatusColor(email.status);
+              return (
+                <div key={email.id} style={{ background: 'white', borderRadius: '0.75rem', padding: '1rem 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontWeight: 700, color: '#1e293b' }}>{email.prospectName}</p>
+                    <p style={{ fontSize: '0.8125rem', color: '#475569' }}>{email.fonction && `${email.fonction} · `}{email.companyName}</p>
+                    <p style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>{email.prospectEmail}</p>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                    <span style={{ padding: '0.25rem 0.75rem', borderRadius: '99px', background: s.bg, color: s.color, fontSize: '0.8125rem', fontWeight: 600 }}>{getStatusLabel(email.status)}</span>
+                    {email.sentAt && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{email.sentAt}</span>}
+                    {email.linkedinUrl && (
+                      <a href={email.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>in</a>
+                    )}
+                    <button onClick={() => { setSelectedEmail(email); setShowPreview(true); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0.875rem', background: 'linear-gradient(to right, #16a34a, #059669)', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, color: 'white' }}>
+                      <Eye size={15} /> Aperçu &amp; Envoyer
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {emails.length === 0 && !uploading && (
+        <div style={{ background: 'white', borderRadius: '0.875rem', padding: '3rem', textAlign: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+          <AlertCircle size={36} color="#cbd5e1" style={{ margin: '0 auto 1rem' }} />
+          <p style={{ color: '#94a3b8', fontSize: '1rem' }}>Importez un fichier XLSX pour générer les emails coaching</p>
+        </div>
+      )}
+    </div>
+  );
+}
