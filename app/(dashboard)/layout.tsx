@@ -66,11 +66,21 @@ export default function DashboardLayout({
             <Mail size={20} />
             Prospection HATMADA
           </Link>
+          <Link href="/prospection/suivi" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.875rem 0.4rem 2.5rem', borderRadius: '0.5rem', color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: '0.8125rem' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            ↳ Suivi &amp; Réponses
+          </Link>
           <Link href="/coaching" style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.625rem 0.875rem', borderRadius: '0.5rem', color: 'rgba(255,255,255,0.9)', textDecoration: 'none', fontSize: '0.9375rem' }}
             onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.12)')}
             onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
             <Users size={20} />
-            Prospection Coaching
+            Coaching HATMADA
+          </Link>
+          <Link href="/coaching/suivi" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.4rem 0.875rem 0.4rem 2.5rem', borderRadius: '0.5rem', color: 'rgba(255,255,255,0.7)', textDecoration: 'none', fontSize: '0.8125rem' }}
+            onMouseEnter={e => (e.currentTarget.style.background = 'rgba(255,255,255,0.1)')}
+            onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}>
+            ↳ Suivi &amp; Réponses
           </Link>
         </nav>
 

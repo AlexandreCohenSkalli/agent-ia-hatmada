@@ -8,6 +8,7 @@ interface SendEmailRequest {
   fromName?: string;
   cc?: string[];
   bcc?: string[];
+  emailId?: string;
 }
 
 // Initialize email transporter (for production)
@@ -35,7 +36,7 @@ function getTransporter() {
 export async function POST(request: NextRequest) {
   try {
     const body: SendEmailRequest = await request.json();
-    const { to, subject, body: emailBody, fromName = 'ProspectAI', cc, bcc } = body;
+    const { to, subject, body: emailBody, fromName = 'ProspectAI', cc, bcc, emailId } = body;
 
     // Validate input
     if (!to || !subject || !emailBody) {
@@ -52,6 +53,30 @@ export async function POST(request: NextRequest) {
     // const testAccount = await nodemailer.createTestAccount();
     // This creates temporary email accounts for testing
 
+    // Tracking pixel URL
+    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const pixelTag = emailId
+      ? `<img src="${appUrl}/api/emails/track/open?id=${emailId}" width="1" height="1" style="display:block;width:1px;height:1px;" alt="" />`
+      : '';
+
+    // Convert plain text to HTML (preserve line breaks and paragraphs)
+    const toHtml = (text: string) => {
+      const escaped = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      return `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; font-size: 15px; color: #222; line-height: 1.7; max-width: 600px; margin: 0 auto; padding: 24px;">${
+        escaped
+          .split('\n\n')
+          .map(p => `<p style="margin: 0 0 14px 0;">${p.replace(/\n/g, '<br/>')}</p>`)
+          .join('')
+      }${pixelTag}</body></html>`;
+    };
+
+    const htmlBody = emailBody.startsWith('<!DOCTYPE')
+      ? emailBody.replace('</body>', `${pixelTag}</body>`)
+      : toHtml(emailBody);
+
     // Send email
     const info = await transporter.sendMail({
       from: `"${fromName}" <${process.env.SENDER_EMAIL}>`,
@@ -59,7 +84,7 @@ export async function POST(request: NextRequest) {
       cc,
       bcc,
       subject,
-      html: emailBody,
+      html: htmlBody,
       text: emailBody.replace(/<[^>]*>/g, ''), // Plain text version
     });
 

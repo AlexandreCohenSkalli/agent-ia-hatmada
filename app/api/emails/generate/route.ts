@@ -56,8 +56,8 @@ YOU ARE SELLING: HATMADA Prospection Service
 - Problems solved: Pipe leakage, low conversion, costly SDR management, inaccurate targeting
 `
       : `
-YOU ARE SELLING: Coaching.com Platform
-- All-in-one platform for professional coaches
+YOU ARE SELLING: Hatmada Coaching Service
+- All-in-one platform for professional coaches (do NOT mention "Coaching.com" in the email — refer only to "nos services" or "notre plateforme")
 - Components: Education (certifications, masterclasses), Software (client management, scheduling), Marketplace (coaches can list themselves), Community (1800+ global coaches)
 - Key benefits: Complete solution, continuous learning, business growth, solitude elimination, scalability
 - Target: Individual coaches, coaching companies, HR departments
@@ -85,6 +85,8 @@ INSTRUCTIONS:
    - Creates urgency or clear next step
    - Keeps professional but conversational tone
    - Uses short sentences and paragraphs
+   - NEVER mention "Coaching.com" anywhere in the email — use "nos services" or "notre plateforme" instead
+   - Always sign the email as: "Raphaël\nHatmada" — never use "[Votre nom]" or any placeholder
 4. Response format MUST be exact JSON:
 
 {

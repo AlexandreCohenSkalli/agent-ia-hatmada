@@ -4,6 +4,26 @@ import { useState } from 'react';
 import { Upload, Eye, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const STATS_KEY = 'hatmada_stats';
+const SENT_KEY = 'hatmada_sent_coaching';
+
+function readStats() {
+  try { return JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch { return {}; }
+}
+function addStats(delta: { sent?: number; replied?: number }) {
+  const s = readStats();
+  const next = { sent: (s.sent || 0) + (delta.sent || 0), replied: (s.replied || 0) + (delta.replied || 0) };
+  localStorage.setItem(STATS_KEY, JSON.stringify(next));
+}
+function saveSentEmail(email: any) {
+  try {
+    const list = JSON.parse(localStorage.getItem(SENT_KEY) || '[]');
+    const exists = list.findIndex((e: any) => e.id === email.id);
+    if (exists >= 0) list[exists] = email; else list.unshift(email);
+    localStorage.setItem(SENT_KEY, JSON.stringify(list));
+  } catch {}
+}
+
 interface EmailRecord {
   id: string;
   prospectName: string;
@@ -25,6 +45,45 @@ export default function CoachingPage() {
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [bulkCount, setBulkCount] = useState('10');
+  const [sendingBulk, setSendingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+
+  const handleBulkSend = async () => {
+    const count = Math.min(Math.max(1, parseInt(bulkCount) || 1), 100);
+    const pending = emails.filter(e => e.status === 'pending').slice(0, count);
+    if (pending.length === 0) return;
+    setSendingBulk(true);
+    setBulkProgress({ done: 0, total: pending.length });
+    let done = 0;
+    for (const email of pending) {
+      try {
+        await fetch('/api/emails/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: email.prospectEmail,
+            subject: email.emailSubject,
+            body: email.emailBody,
+            fromName: 'Raphaël — Hatmada',
+          }),
+        });
+        done++;
+        setBulkProgress({ done, total: pending.length });
+        addStats({ sent: 1 });
+        const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+        saveSentEmail(updated);
+        setEmails(prev => prev.map(e =>
+          e.id === email.id ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') } : e
+        ));
+      } catch (err) {
+        console.error('Erreur envoi', email.prospectEmail, err);
+      }
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setSendingBulk(false);
+    setBulkProgress(null);
+  };
 
   const generateEmail = (prenom: string, societe: string, fonction: string): { subject: string; body: string } => {
     const firstName = prenom || 'Madame/Monsieur';
@@ -33,40 +92,42 @@ export default function CoachingPage() {
 
     const templates = [
       {
-        subject: `${company} × Coaching.com — Développez votre potentiel`,
+        subject: `Développez votre potentiel — ${company}`,
         body: `Bonjour ${firstName},
 
-Je vous contacte car ${company}${role} est exactement le profil que nous accompagnons sur Coaching.com.
+Je me permets de vous contacter car votre profil${role} chez ${company} correspond exactement aux professionnels que nous accompagnons.
 
-Notre plateforme offre un accompagnement complet pour les professionnels ambitieux :
+Nos services offrent un accompagnement complet pour les professionnels ambitieux :
 • Sessions 1:1 avec des coachs certifiés
 • Programmes de leadership et développement personnel
 • Suivi de progression et bilans réguliers
 • Communauté de 1800+ coachs experts
 
-Seriez-vous disponible(e) pour un échange de 20 min cette semaine ?
+Seriez-vous disponible pour un échange de 20 min cette semaine ?
 
 Cordialement,
-[Votre nom]
-Coaching.com`,
+Raphaël
+Hatmada
+hatmadacoaching.com`,
       },
       {
-        subject: `Boostez votre développement professionnel — ${company}`,
+        subject: `Coaching professionnel — ${company}`,
         body: `Bonjour ${firstName},
 
-J'ai regardé votre parcours chez ${company} et je pense que le coaching professionnel peut vraiment faire la différence à votre niveau.
+J'accompagne des professionnels${role} dans des structures comme ${company} — et je pense que nos services peuvent vraiment faire la différence à votre niveau.
 
-Coaching.com connecte les professionnels avec les meilleurs coachs certifiés pour :
+Nous connectons les professionnels avec les meilleurs coachs certifiés pour :
 • Accélérer leur évolution de carrière
 • Renforcer leur leadership
 • Gérer les transitions professionnelles
 • Développer leur impact
 
-Un échange rapide pour voir si c'est pertinent pour vous ?
+Seriez-vous disponible pour un échange de 20 min cette semaine ?
 
 Cordialement,
-[Votre nom]
-Coaching.com`,
+Raphaël
+Hatmada
+hatmadacoaching.com`,
       },
     ];
 
@@ -129,16 +190,45 @@ Coaching.com`,
     reader.readAsBinaryString(uploadedFile);
   };
 
-  const handleSendEmail = (email: EmailRecord) => {
+  const handleSendEmail = async (email: EmailRecord) => {
     setSendingEmail(true);
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/emails/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email.prospectEmail,
+          subject: email.emailSubject,
+          body: email.emailBody,
+          fromName: 'Raphaël — Hatmada',
+          emailId: email.id,
+        }),
+      });
+      if (!res.ok) throw new Error('Erreur envoi');
+      addStats({ sent: 1 });
+      const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+      saveSentEmail(updated);
       setEmails(emails.map(e =>
         e.id === email.id
           ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') }
           : e
       ));
+    } catch (err) {
+      console.error('Erreur envoi email', err);
+      alert('Erreur lors de l\'envoi. Vérifiez la configuration SMTP dans .env.local.');
+    } finally {
       setSendingEmail(false);
-    }, 1000);
+    }
+  };
+
+  const handleMarkReplied = (emailId: string) => {
+    addStats({ replied: 1 });
+    setEmails(prev => {
+      const next = prev.map(e => e.id === emailId ? { ...e, status: 'replied' as const } : e);
+      const replied = next.find(e => e.id === emailId);
+      if (replied) saveSentEmail(replied);
+      return next;
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -161,7 +251,7 @@ Coaching.com`,
 
   return (
     <div style={{ padding: '2rem' }}>
-      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', marginBottom: '1.5rem' }}>Prospection Coaching</h1>
+      <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b', marginBottom: '1.5rem' }}>Coaching HATMADA</h1>
 
       {/* Upload Section */}
       <div style={{ background: 'white', borderRadius: '0.875rem', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: '1.5rem', border: '2px dashed #bbf7d0' }}>
@@ -184,7 +274,7 @@ Coaching.com`,
 
       {/* Stats bar */}
       {emails.length > 0 && (
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {[
             { label: 'Total', value: emails.length, color: '#16a34a' },
             { label: 'En attente', value: emails.filter(e => e.status === 'pending').length, color: '#d97706' },
@@ -196,6 +286,25 @@ Coaching.com`,
               <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{stat.label}</span>
             </div>
           ))}
+          {/* Envoi en masse */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'white', borderRadius: '0.75rem', padding: '0.75rem 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+            <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Envoyer les</span>
+            <input
+              type="number" min={1} max={emails.filter(e => e.status === 'pending').length}
+              value={bulkCount}
+              onChange={e => setBulkCount(e.target.value)}
+              onBlur={e => setBulkCount(String(Math.min(Math.max(1, parseInt(e.target.value) || 1), 100)))}
+              style={{ width: '60px', padding: '0.375rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.375rem', fontSize: '0.9375rem', fontWeight: 700, textAlign: 'center' }}
+            />
+            <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>premiers</span>
+            <button
+              onClick={handleBulkSend}
+              disabled={sendingBulk || emails.filter(e => e.status === 'pending').length === 0}
+              style={{ padding: '0.5rem 1.25rem', background: sendingBulk ? '#94a3b8' : 'linear-gradient(to right, #16a34a, #059669)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, cursor: sendingBulk ? 'not-allowed' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+            >
+              {sendingBulk && bulkProgress ? `${bulkProgress.done}/${bulkProgress.total} envoyés...` : '🚀 Envoyer'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -255,6 +364,12 @@ Coaching.com`,
                     {email.sentAt && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{email.sentAt}</span>}
                     {email.linkedinUrl && (
                       <a href={email.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>in</a>
+                    )}
+                    {email.status === 'sent' && (
+                      <button onClick={() => handleMarkReplied(email.id)}
+                        style={{ padding: '0.375rem 0.75rem', background: '#f3e8ff', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '0.375rem', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}>
+                        Répondu ✓
+                      </button>
                     )}
                     <button onClick={() => { setSelectedEmail(email); setShowPreview(true); }}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0.875rem', background: 'linear-gradient(to right, #16a34a, #059669)', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, color: 'white' }}>

@@ -4,6 +4,26 @@ import { useState } from 'react';
 import { Upload, Eye, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
+const STATS_KEY = 'hatmada_stats';
+const SENT_KEY = 'hatmada_sent_prospection';
+
+function readStats() {
+  try { return JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch { return {}; }
+}
+function addStats(delta: { sent?: number; replied?: number }) {
+  const s = readStats();
+  const next = { sent: (s.sent || 0) + (delta.sent || 0), replied: (s.replied || 0) + (delta.replied || 0) };
+  localStorage.setItem(STATS_KEY, JSON.stringify(next));
+}
+function saveSentEmail(email: any) {
+  try {
+    const list = JSON.parse(localStorage.getItem(SENT_KEY) || '[]');
+    const exists = list.findIndex((e: any) => e.id === email.id);
+    if (exists >= 0) list[exists] = email; else list.unshift(email);
+    localStorage.setItem(SENT_KEY, JSON.stringify(list));
+  } catch {}
+}
+
 interface EmailRecord {
   id: string;
   prospectName: string;
@@ -25,45 +45,84 @@ export default function ProspectionPage() {
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
   const [showPreview, setShowPreview] = useState(false);
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [bulkCount, setBulkCount] = useState('10');
+  const [sendingBulk, setSendingBulk] = useState(false);
+  const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
 
-  const generateEmail = (prenom: string, _nom: string, societe: string, fonction: string): { subject: string; body: string } => {
+  const handleBulkSend = async () => {
+    const count = Math.min(Math.max(1, parseInt(bulkCount) || 1), 100);
+    const pending = emails.filter(e => e.status === 'pending').slice(0, count);
+    if (pending.length === 0) return;
+    setSendingBulk(true);
+    setBulkProgress({ done: 0, total: pending.length });
+    let done = 0;
+    for (const email of pending) {
+      try {
+        await fetch('/api/emails/send', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            to: email.prospectEmail,
+            subject: email.emailSubject,
+            body: email.emailBody,
+            fromName: 'Raphaël — Hatmada',
+          }),
+        });
+        done++;
+        setBulkProgress({ done, total: pending.length });
+        addStats({ sent: 1 });
+        const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+        saveSentEmail(updated);
+        setEmails(prev => prev.map(e =>
+          e.id === email.id ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') } : e
+        ));
+      } catch (err) {
+        console.error('Erreur envoi', email.prospectEmail, err);
+      }
+      // petite pause pour ne pas surcharger le SMTP
+      await new Promise(r => setTimeout(r, 800));
+    }
+    setSendingBulk(false);
+    setBulkProgress(null);
+  };
+
+  const generateEmail = (prenom: string, societe: string, fonction: string): { subject: string; body: string } => {
     const firstName = prenom || 'Madame/Monsieur';
     const company = societe || 'votre entreprise';
     const role = fonction ? ` en tant que ${fonction}` : '';
 
     const templates = [
       {
-        subject: `${company} × HATMADA — RDV qualifiés B2B`,
+        subject: `${company} × Hatmada — RDV qualifiés B2B`,
         body: `Bonjour ${firstName},
 
-Je vous contacte car ${company}${role} est exactement le profil que nous accompagnons chez HATMADA.
+Je me permets de vous contacter car nous accompagnons des structures comme ${company} dans le développement de leur pipeline commercial.
 
-Nous externalisons la prospection B2B pour remplir les pipelines commerciaux avec des RDV qualifiés — résultats en quelques semaines, pas des mois.
+Hatmada externalise la prospection B2B : nos équipes gèrent les appels à froid pour vous livrer des RDV avec des décideurs qualifiés — résultats en quelques semaines, pas des mois.
 
-3 raisons pour lesquelles ça peut vous intéresser :
+Ce qui nous différencie :
 • Tous les appels sont enregistrés et analysés par IA
 • Taux de conversion supérieur aux canaux classiques
 • ROI 100% mesurable et transparent
 
-Ouvert(e) pour un échange de 20 min cette semaine ?
+Seriez-vous disponible pour un échange de 20 min cette semaine ?
 
 Cordialement,
-[Votre nom]
-HATMADA`,
-      },
-      {
-        subject: `Remplissez votre pipeline — ${company}`,
+Raphaël
+Hatmada
+hatmadaprospection.com`,
         body: `Bonjour ${firstName},
 
-J'ai regardé ${company} et je pense que nos services de prospection B2B peuvent vraiment accélérer votre développement commercial.
+Je vous contacte car votre profil${role} chez ${company} correspond exactement aux personnes que nous accompagnons.
 
-HATMADA prend en charge toute la prospection téléphonique pour vous livrer des RDV avec des décideurs qualifiés. Nos équipes sont formées sur votre pitch et vos cibles.
+Hatmada prend en charge toute votre prospection téléphonique B2B : ciblage, scripts, appels, et prise de RDV — pour que vos équipes se concentrent uniquement sur la closing.
 
-Qu'est-ce qui vous prendrait 20 min pour en discuter ?
+Seriez-vous disponible pour un échange de 20 min cette semaine ?
 
 Cordialement,
-[Votre nom]
-HATMADA`,
+Raphaël
+Hatmada
+hatmadaprospection.com`,
       },
     ];
 
@@ -87,7 +146,6 @@ HATMADA`,
 
         const parsed: EmailRecord[] = rows
           .filter((row) => {
-            // Cherche une colonne email quelle que soit la casse/nom
             const emailVal = row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '';
             return emailVal.toString().includes('@');
           })
@@ -97,11 +155,10 @@ HATMADA`,
             const societe = (row['Société'] || row['Societe'] || row['société'] || row['SOCIÉTÉ'] || '').toString().trim();
             const fonction = (row['Fonction'] || row['FONCTION'] || row['fonction'] || '').toString().trim();
             const email = (row['Email 1'] || row['Email'] || row['email'] || '').toString().trim();
-            // row['Autres emails'] ignoré pour l'instant
             const linkedin = (row['URL LinkedIn'] || row['LinkedIn'] || row['Linkedin'] || '').toString().trim();
             const site = (row['Site Internet'] || row['Site Web'] || row['Website'] || '').toString().trim();
             const fullName = [prenom, nom].filter(Boolean).join(' ') || 'Prospect';
-            const { subject, body } = generateEmail(prenom, nom, societe, fonction);
+            const { subject, body } = generateEmail(prenom, societe, fonction);
 
             return {
               id: `row-${index}`,
@@ -130,16 +187,43 @@ HATMADA`,
 
   const handleSendEmail = async (email: EmailRecord) => {
     setSendingEmail(true);
-    
-    // Simulate email sending
-    setTimeout(() => {
+    try {
+      const res = await fetch('/api/emails/send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: email.prospectEmail,
+          subject: email.emailSubject,
+          body: email.emailBody,
+          fromName: 'Raphaël — Hatmada',
+          emailId: email.id,
+        }),
+      });
+      if (!res.ok) throw new Error('Erreur envoi');
+      addStats({ sent: 1 });
+      const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+      saveSentEmail(updated);
       setEmails(emails.map(e =>
         e.id === email.id
           ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') }
           : e
       ));
+    } catch (err) {
+      console.error('Erreur envoi email', err);
+      alert('Erreur lors de l\'envoi. Vérifiez la configuration SMTP dans .env.local.');
+    } finally {
       setSendingEmail(false);
-    }, 1000);
+    }
+  };
+
+  const handleMarkReplied = (emailId: string) => {
+    addStats({ replied: 1 });
+    setEmails(prev => {
+      const next = prev.map(e => e.id === emailId ? { ...e, status: 'replied' as const } : e);
+      const replied = next.find(e => e.id === emailId);
+      if (replied) saveSentEmail(replied);
+      return next;
+    });
   };
 
   const getStatusColor = (status: string) => {
@@ -185,7 +269,7 @@ HATMADA`,
 
       {/* Stats bar */}
       {emails.length > 0 && (
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
           {[
             { label: 'Total', value: emails.length, color: '#2563eb' },
             { label: 'En attente', value: emails.filter(e => e.status === 'pending').length, color: '#d97706' },
@@ -197,6 +281,25 @@ HATMADA`,
               <span style={{ fontSize: '0.75rem', color: '#64748b', fontWeight: 600 }}>{stat.label}</span>
             </div>
           ))}
+          {/* Envoi en masse */}
+          <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '0.75rem', background: 'white', borderRadius: '0.75rem', padding: '0.75rem 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)' }}>
+            <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Envoyer les</span>
+            <input
+              type="number" min={1} max={emails.filter(e => e.status === 'pending').length}
+              value={bulkCount}
+              onChange={e => setBulkCount(e.target.value)}
+              onBlur={e => setBulkCount(String(Math.min(Math.max(1, parseInt(e.target.value) || 1), 100)))}
+              style={{ width: '60px', padding: '0.375rem 0.5rem', border: '1px solid #e2e8f0', borderRadius: '0.375rem', fontSize: '0.9375rem', fontWeight: 700, textAlign: 'center' }}
+            />
+            <span style={{ fontSize: '0.875rem', color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>premiers</span>
+            <button
+              onClick={handleBulkSend}
+              disabled={sendingBulk || emails.filter(e => e.status === 'pending').length === 0}
+              style={{ padding: '0.5rem 1.25rem', background: sendingBulk ? '#94a3b8' : 'linear-gradient(to right, #2563eb, #06b6d4)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 700, cursor: sendingBulk ? 'not-allowed' : 'pointer', fontSize: '0.875rem', whiteSpace: 'nowrap' }}
+            >
+              {sendingBulk && bulkProgress ? `${bulkProgress.done}/${bulkProgress.total} envoyés...` : '🚀 Envoyer'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -256,6 +359,12 @@ HATMADA`,
                     {email.sentAt && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{email.sentAt}</span>}
                     {email.linkedinUrl && (
                       <a href={email.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>in</a>
+                    )}
+                    {email.status === 'sent' && (
+                      <button onClick={() => handleMarkReplied(email.id)}
+                        style={{ padding: '0.375rem 0.75rem', background: '#f3e8ff', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '0.375rem', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}>
+                        Répondu ✓
+                      </button>
                     )}
                     <button onClick={() => { setSelectedEmail(email); setShowPreview(true); }}
                       style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0.875rem', background: 'linear-gradient(to right, #2563eb, #06b6d4)', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, color: 'white' }}>
