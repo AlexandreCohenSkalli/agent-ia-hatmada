@@ -1,91 +1,74 @@
-# ProspectAI - Plateforme de Prospection Intelligente avec Claude
+# ProspectAI — Outil de Prospection HATMADA
 
-Une plateforme SaaS complète pour automatiser votre prospection B2B et vendre HATMADA + vos services de coaching avec l'IA Claude.
+Outil interne de prospection B2B pour **HATMADA** — permet d'envoyer des emails de prospection personnalisés en masse via deux verticales :
+- **Prospection HATMADA** : vente des services d'externalisation commerciale ([hatmadaprospection.com](https://hatmadaprospection.com))
+- **Coaching HATMADA** : vente des formations commerciales pour équipes de vente ([hatmadacoaching.com](https://hatmadacoaching.com))
+
+### À propos de HATMADA Coaching
+
+HATMADA forme les équipes commerciales B2B avec une approche 100% terrain et mesurable, animée par **Simon Nabet** (6 entreprises créées, 70 commerciaux managés, 500+ commerciaux formés).
+
+**Programmes :**
+- **Cold Call Mastery** — Prospection & prise de RDV
+- **De la Découverte au Closing** — Découverte & négociation
+- **Coaching à l'heure** — Accompagnement sur-mesure post-formation
+
+**Résultats mesurés :** +32% RDV · +19% CA · +13% marge · 98,7% satisfaction
 
 ## 🎯 Fonctionnalités
 
-### Dashboard Multi-Utilisateur
+### Dashboard
 - ✅ Authentification sécurisée (Login/Register)
-- ✅ 2 sections distinctes : **Prospection HATMADA** & **Coaching**
-- ✅ Multi-utilisateur avec tokens JWT
-
-### Agent IA Claude
-- ✅ Génère automatiquement des emails personnalisés
-- ✅ Analyse le type d'entreprise et adapte le message
-- ✅ Comprend les offres HATMADA et Coaching
-- ✅ Rédige des emails hyper-personnalisés
+- ✅ 2 sections distinctes : **Prospection HATMADA** & **Coaching HATMADA**
+- ✅ Statistiques en temps réel (emails envoyés, réponses, ouvertures)
 
 ### Gestion des Campagnes
-- ✅ Upload de fichiers XLSX (listes d'emails)
-- ✅ Génération d'emails en batch
+- ✅ Upload de fichiers XLSX (listes de prospects)
+- ✅ Génération automatique d'emails personnalisés (templates intégrés)
 - ✅ Aperçu des emails avant envoi
-- ✅ Suivi complet des envois
+- ✅ Envoi individuel ou en masse (1 à 100 emails)
 
 ### Suivi & Analytics
-- ✅ Timestamp d'envoi précis
-- ✅ Statuts: En attente / Envoyé / Répondu
-- ✅ Détection des réponses
-- ✅ Dashboard avec analytics
+- ✅ Pages Suivi par section avec recherche et filtres
+- ✅ Statuts : En attente / Envoyé / Répondu
+- ✅ Tracking d'ouverture par pixel (fonctionnel en production)
+- ✅ Bouton "Répondu ✓" pour marquer manuellement les réponses
+- ✅ Dashboard avec compteurs live
 
 ## 🛠️ Stack Technique
 
 - **Frontend**: Next.js 14 + React 18 + TypeScript
-- **Styling**: Tailwind CSS
+- **Styling**: Inline styles (pas de dépendance CSS externe)
 - **Backend**: Next.js API Routes
-- **IA**: Claude API (Anthropic)
-- **Database**: PostgreSQL + Prisma ORM
-- **Auth**: JWT + bcrypt
-- **Hosting**: Vercel
-- **Files**: XLSX parsing
-
-## 📋 Prerequisites
-
-- Node.js 18+
-- PostgreSQL
-- Clé API Anthropic (Claude)
+- **Envoi email**: Nodemailer (Gmail SMTP)
+- **Tracking ouvertures**: Pixel 1×1 — route `/api/emails/track/open`
+- **Persistence**: localStorage (stats, emails envoyés) + fichier JSON tmp (tracking)
+- **Auth**: JWT simple
+- **Fichiers**: XLSX parsing (client-side)
 
 ## 🚀 Installation
 
-### 1. Cloner/Initialiser le projet
-
-```bash
-cd hatmada
-```
-
-### 2. Installer les dépendances
+### 1. Installer les dépendances
 
 ```bash
 npm install
 ```
 
-### 3. Configuration des variables d'environnement
+### 2. Configurer les variables d'environnement
 
-Créer un fichier `.env.local` basé sur `.env.local.example`:
+Créer un fichier `.env.local` :
 
-```bash
-cp .env.local.example .env.local
-```
-
-Remplir les variables:
 ```env
-ANTHROPIC_API_KEY=sk-ant-xxxxx
-DATABASE_URL=postgresql://user:password@localhost:5432/prospect_ai
-JWT_SECRET=your_super_secret_key_here
-NEXTAUTH_SECRET=another_secret_key
-NEXTAUTH_URL=http://localhost:3000
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=votre_email@gmail.com
+SMTP_PASS=votre_app_password_gmail
+SENDER_EMAIL=votre_email@gmail.com
+APP_URL=http://localhost:3000   # À changer en production pour le tracking pixel
+JWT_SECRET=votre_secret_jwt
 ```
 
-### 4. Setup de la base de données
-
-```bash
-# Générer le client Prisma
-npm run db:generate
-
-# Créer les tables
-npm run db:push
-```
-
-### 5. Lancer le serveur de développement
+### 3. Lancer le serveur de développement
 
 ```bash
 npm run dev
@@ -93,163 +76,77 @@ npm run dev
 
 L'app sera disponible sur `http://localhost:3000`
 
-## 📝 Guide d'Utilisation
-
-### 1. Créer un compte
-
-Accédez à `http://localhost:3000/register` et créez un compte.
-
-### 2. Se connecter
-
-Allez sur `http://localhost:3000/login` et entrez vos identifiants.
-
-### 3. Créer une campagne de prospection
-
-1. Allez sur **Prospection HATMADA**
-2. Uploadez un fichier XLSX avec les colonnes:
-   - `Nom` (prospect name)
-   - `Email` (prospect email)
-   - `Entreprise` (company name)
-   - `Secteur` (industry) - optionnel
-
-3. Les emails seront générés automatiquement par Claude
-4. Consultez l'aperçu et envoyez
-
-### 4. Créer une campagne de coaching
-
-1. Allez sur **Coaching**
-2. Même processus qu'en prospection
-3. Les emails seront adaptés à la vente de Coaching.com
-
 ## 📊 Format du fichier XLSX
 
-Pour que le système fonctionne bien, votre fichier Excel doit avoir:
+Les colonnes reconnues automatiquement :
 
-| Nom | Email | Entreprise | Secteur |
-|-----|-------|-----------|---------|
-| Jean Dupont | jean@company.com | Tech Solutions | SaaS |
-| Marie Bernard | marie@startup.com | Growth Startup | E-commerce |
+| Colonne | Variantes acceptées |
+|---------|-------------------|
+| Prénom | `Prénom`, `Prenom`, `prénom` |
+| Nom | `Nom`, `NOM` |
+| Email | `Email 1`, `Email`, `email`, `EMAIL` |
+| Société | `Société`, `Societe`, `société`, `SOCIÉTÉ` |
+| Fonction | `Fonction`, `fonction`, `FONCTION` |
+| LinkedIn | `URL LinkedIn`, `LinkedIn`, `Linkedin` |
+| Site web | `Site Internet`, `Site Web`, `Website` |
 
 ## 🔌 API Endpoints
 
 ### Authentication
-- `POST /api/auth/register` - Créer un compte
-- `POST /api/auth/login` - Se connecter
-- `POST /api/auth/verify` - Vérifier le token
+- `POST /api/auth/register` — Créer un compte
+- `POST /api/auth/login` — Se connecter
 
 ### Emails
-- `POST /api/emails/generate` - Générer des emails avec Claude
-- `POST /api/emails/send` - Envoyer un email
-- `GET /api/emails/list` - Lister les emails
-- `GET /api/emails/track` - Tracker les emails
+- `POST /api/emails/send` — Envoyer un email (Nodemailer)
+- `POST /api/emails/generate` — Générer un email avec Claude (nécessite API key)
 
-### Files
-- `POST /api/files/upload` - Uploader un fichier XLSX
-- `DELETE /api/files/:id` - Supprimer un fichier
+### Tracking
+- `GET /api/emails/track/open?id=emailId` — Pixel d'ouverture (retourne GIF 1×1)
+- `GET /api/emails/track/status?ids=id1,id2` — Statut d'ouverture des emails
 
-## 🤖 Comment fonctionne l'IA Claude?
+## 📧 Templates Email
 
-1. **Analyse du prospect**: Le système reçoit les données du prospect (nom, email, entreprise, secteur)
-2. **Détection du service**: Basé sur le type d'entreprise, Claude détermine le meilleur pitch (HATMADA ou Coaching)
-3. **Génération d'email**: Claude génère un email hyper-personnalisé avec:
-   - Un sujet accrocheur
-   - Un opening spécifique à l'entreprise
-   - Une proposition de valeur adaptée
-   - Un call-to-action clair
-4. **Validation**: L'email est validé puis présenté pour validation avant envoi
+### Coaching HATMADA (cibles : directeurs commerciaux, CEO, DRH)
 
-## 📧 Configuration d'Email
+Les deux templates intégrés mettent en avant :
+- Les problèmes réels des équipes de vente (peur du téléphone, pipeline vide, cycle trop long)
+- Les 3 programmes HATMADA (Cold Call Mastery, Découverte au Closing, Coaching à l'heure)
+- Les stats mesurées (+32% RDV, +19% CA, 500+ commerciaux formés)
+- CTA : audit offert de 30 min
 
-Par défaut, le système affiche une interface d'aperçu. Pour envoyer réellement des emails:
+### Prospection HATMADA
 
-1. Configurez un service SMTP:
-   - Gmail SMTP
-   - SendGrid
-   - Amazon SES
-   - Autre service de votre choix
-
-2. Mettez à jour le `.env.local`:
-```env
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=votre_email@gmail.com
-SMTP_PASS=votre_app_password
-SENDER_EMAIL=noreply@votredomaine.com
-```
-
-3. Créez une route `/api/emails/send` pour envoyer réellement
+Templates orientés externalisation commerciale — signature `hatmadaprospection.com`.
 
 ## 🚀 Déploiement sur Vercel
 
-### 1. Préparer le projet
-
-```bash
-git init
-git add .
-git commit -m "Initial commit"
-```
-
-### 2. Créer un repo GitHub
-
-Créez un nouveau repo sur GitHub et pushez:
-
-```bash
-git remote add origin https://github.com/votre-user/prospect-ai.git
-git branch -M main
-git push -u origin main
-```
-
-### 3. Déployer sur Vercel
-
-1. Allez sur [vercel.com](https://vercel.com)
-2. Cliquez "New Project"
-3. Importez votre repo GitHub
-4. Configurez les variables d'environnement
-5. Déployez!
-
-## 🔐 Sécurité
-
-- ✅ Passwords hashées avec bcrypt
-- ✅ JWT tokens pour l'authentification
-- ✅ Validation des inputs
-- ✅ CORS configuré
-- ✅ Variables d'environnement sécurisées
-
-## 📖 Documentation Claude AI
-
-Pour générer les meilleurs emails:
-
-- Utilisez des hooks intéressants basés sur le secteur
-- Adaptez le message HATMADA/Coaching au type d'entreprise
-- Utilisez des statistiques réelles (45 RDV/mois pour HATMADA, 1800+ coachs pour Coaching)
-- Gardez les emails courts et directs (max 5 paragraphes)
+1. Pushez le repo sur GitHub
+2. Importez sur [vercel.com](https://vercel.com)
+3. Ajoutez les variables d'environnement (dont `APP_URL=https://votre-domaine.vercel.app`)
+4. Déployez — le tracking pixel fonctionnera automatiquement en production
 
 ## 🐛 Troubleshooting
 
-### Erreur "ANTHROPIC_API_KEY not found"
-- Assurez-vous d'avoir copié votre clé API dans `.env.local`
-- Vérifiez que vous l'avez obtenue sur [console.anthropic.com](https://console.anthropic.com)
+### Emails non envoyés
+- Vérifiez `SMTP_USER` et `SMTP_PASS` dans `.env.local`
+- Pour Gmail : utilisez un **mot de passe d'application** (pas votre mot de passe normal) — [Google App Passwords](https://myaccount.google.com/apppasswords)
 
-### Erreur "Database connection failed"
-- Vérifiez que PostgreSQL est lancé
-- Vérifiez la DATABASE_URL
-- Lancez `npm run db:push` pour créer les tables
+### Tracking pixel ne fonctionne pas
+- Normal en local : Gmail ne peut pas accéder à `localhost`
+- Fonctionne automatiquement une fois déployé sur Vercel (mettre à jour `APP_URL`)
 
 ### Fichiers XLSX ne se chargent pas
-- Vérifiez que le fichier a les bonnes colonnes
-- Utilisez le format `.xlsx` (pas `.xls`)
-- Maximun 500 lignes pour les tests
-
-## 📞 Support
-
-Pour des questions ou des bugs, créez un issue sur GitHub ou contactez le support.
+- Vérifiez que le fichier est au format `.xlsx`
+- Vérifiez que la colonne email contient bien un `@`
 
 ## 📄 Licence
 
-MIT - Libre d'utilisation et de modification
+Usage interne HATMADA — 2026
 
 ---
 
-**Créé par**: ProspectAI Team
-**Année**: 2026
-**Version**: 0.1.0
+**Repo** : [AlexandreCohenSkalli/agent-ia-hatmada](https://github.com/AlexandreCohenSkalli/agent-ia-hatmada)
+**Version** : 1.0.0
+
+
+### 2. Installer les dépendances

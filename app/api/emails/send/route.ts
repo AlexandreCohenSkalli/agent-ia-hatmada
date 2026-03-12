@@ -65,8 +65,13 @@ export async function POST(request: NextRequest) {
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
+      // Auto-link URLs
+      const linked = escaped.replace(
+        /(https?:\/\/[^\s<]+)/g,
+        '<a href="$1" style="color:#2563eb;" target="_blank">$1</a>'
+      );
       return `<!DOCTYPE html><html><body style="font-family: Arial, sans-serif; font-size: 15px; color: #222; line-height: 1.7; max-width: 600px; margin: 0 auto; padding: 24px;">${
-        escaped
+        linked
           .split('\n\n')
           .map(p => `<p style="margin: 0 0 14px 0;">${p.replace(/\n/g, '<br/>')}</p>`)
           .join('')

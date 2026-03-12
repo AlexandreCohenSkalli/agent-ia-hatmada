@@ -48,6 +48,7 @@ export default function CoachingPage() {
   const [bulkCount, setBulkCount] = useState('10');
   const [sendingBulk, setSendingBulk] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const handleBulkSend = async () => {
     const count = Math.min(Math.max(1, parseInt(bulkCount) || 1), 100);
@@ -92,42 +93,45 @@ export default function CoachingPage() {
 
     const templates = [
       {
-        subject: `Développez votre potentiel — ${company}`,
+        subject: `Former vos commerciaux — ${company}`,
         body: `Bonjour ${firstName},
 
-Je me permets de vous contacter car votre profil${role} chez ${company} correspond exactement aux professionnels que nous accompagnons.
+Je me permets de vous contacter car j'accompagne de nombreux ${role} dans des structures comme ${company} pour transformer leurs équipes commerciales.
 
-Nos services offrent un accompagnement complet pour les professionnels ambitieux :
-• Sessions 1:1 avec des coachs certifiés
-• Programmes de leadership et développement personnel
-• Suivi de progression et bilans réguliers
-• Communauté de 1800+ coachs experts
+Beaucoup de mes clients nous contactent pour un problème commun : des commerciaux qui fuient le téléphone, un pipeline qui se vide, et un écart de performance trop fort entre les meilleurs et les autres.
 
-Seriez-vous disponible pour un échange de 20 min cette semaine ?
+Chez HATMADA, on forme vos équipes de vente avec une approche 100% terrain et mesurable :
+• Cold Call Mastery — vos commerciaux décrochent plus de rendez-vous qualifiés
+• De la Découverte au Closing — cycle de vente plus court, taux de closing en hausse
+• Coaching à l'heure — accompagnement sur-mesure post-formation
+
+Nos clients observent en moyenne +32% de rendez-vous et +19% de CA après formation.
+
+Seriez-vous disponible pour un échange de 30 min cette semaine pour discuter de vos besoins?
 
 Cordialement,
 Raphaël
-Hatmada
-hatmadacoaching.com`,
+HATMADA — Formation Commerciale
+https://hatmadacoaching.com`,
       },
       {
-        subject: `Coaching professionnel — ${company}`,
+        subject: `Vos commerciaux closent-ils assez vite ? — ${company}`,
         body: `Bonjour ${firstName},
 
-J'accompagne des professionnels${role} dans des structures comme ${company} — et je pense que nos services peuvent vraiment faire la différence à votre niveau.
+J'ai regardé le profil de ${company} et je pense qu'on peut avoir un échange intéressant.
 
-Nous connectons les professionnels avec les meilleurs coachs certifiés pour :
-• Accélérer leur évolution de carrière
-• Renforcer leur leadership
-• Gérer les transitions professionnelles
-• Développer leur impact
+Si vos commerciaux${role} passent des semaines sur un deal qui devrait se conclure en jours, si votre téléphone sonne moins que prévu ou si votre pipeline manque de leads qualifiés — c'est exactement ce qu'on règle chez HATMADA.
 
-Seriez-vous disponible pour un échange de 20 min cette semaine ?
+Simon Nabet, notre formateur, a construit et managé des équipes de vente jusqu'à 70 commerciaux. Il a formé 500+ commerciaux avec des résultats mesurés : +32% de RDV, +19% de CA, 98,7% de satisfaction.
+
+La méthode est simple : audit terrain, formation présentielle 100% sur mesure, puis coaching post-formation pour ancrer les habitudes.
+
+Un audit offert de 30 min pour évaluer le potentiel de vos équipes ?
 
 Cordialement,
 Raphaël
-Hatmada
-hatmadacoaching.com`,
+HATMADA — Formation Commerciale
+https://hatmadacoaching.com`,
       },
     ];
 
@@ -140,19 +144,39 @@ hatmadacoaching.com`,
 
     setFile(uploadedFile);
     setUploading(true);
+    setWarnings([]);
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
         const data = evt.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        const warningsList: string[] = [];
+        rows.forEach((row, i) => {
+          const rowNum = i + 2;
+          const emailVal = (row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '').toString().trim();
+          const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
+          const nom = (row['Nom'] || row['NOM'] || '').toString().trim();
+          const societe = (row['Société'] || row['Societe'] || row['société'] || row['SOCIÉTÉ'] || '').toString().trim();
+          const label = prenom || nom || emailVal || `ligne ${rowNum}`;
+          if (!emailVal) {
+            warningsList.push(`Ligne ${rowNum} (${label}) — Email manquant, ligne ignorée.`);
+          } else if (!emailVal.includes('@') || !emailVal.includes('.')) {
+            warningsList.push(`Ligne ${rowNum} — Email invalide "${emailVal}", ligne ignorée.`);
+          } else {
+            if (!prenom && !nom) warningsList.push(`Ligne ${rowNum} (${emailVal}) — Prénom et Nom manquants, email généré sans nom.`);
+            if (!societe) warningsList.push(`Ligne ${rowNum} (${emailVal}) — Société manquante, email généré sans société.`);
+          }
+        });
+        setWarnings(warningsList);
 
         const parsed: EmailRecord[] = rows
           .filter((row) => {
             const emailVal = row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '';
-            return emailVal.toString().includes('@');
+            return emailVal.toString().includes('@') && emailVal.toString().includes('.');
           })
           .map((row, index) => {
             const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
@@ -187,7 +211,7 @@ hatmadacoaching.com`,
         setUploading(false);
       }
     };
-    reader.readAsBinaryString(uploadedFile);
+    reader.readAsArrayBuffer(uploadedFile);
   };
 
   const handleSendEmail = async (email: EmailRecord) => {
@@ -269,6 +293,16 @@ hatmadacoaching.com`,
 
         {uploading && (
           <p style={{ marginTop: '1rem', textAlign: 'center', color: '#16a34a', fontWeight: 600 }}>Lecture du fichier et génération des emails...</p>
+        )}
+        {warnings.length > 0 && (
+          <div style={{ marginTop: '1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '1rem' }}>
+            <p style={{ fontWeight: 700, color: '#dc2626', marginBottom: '0.5rem' }}>⚠️ {warnings.length} avertissement{warnings.length > 1 ? 's' : ''} détecté{warnings.length > 1 ? 's' : ''}</p>
+            <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+              {warnings.map((w, i) => (
+                <li key={i} style={{ color: '#b91c1c', fontSize: '0.875rem', marginBottom: '0.25rem' }}>{w}</li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 

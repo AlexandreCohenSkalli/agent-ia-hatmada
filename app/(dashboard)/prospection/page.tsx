@@ -48,6 +48,7 @@ export default function ProspectionPage() {
   const [bulkCount, setBulkCount] = useState('10');
   const [sendingBulk, setSendingBulk] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
+  const [warnings, setWarnings] = useState<string[]>([]);
 
   const handleBulkSend = async () => {
     const count = Math.min(Math.max(1, parseInt(bulkCount) || 1), 100);
@@ -110,19 +111,22 @@ Seriez-vous disponible pour un échange de 20 min cette semaine ?
 Cordialement,
 Raphaël
 Hatmada
-hatmadaprospection.com`,
+https://hatmadaprospection.com`,
+      },
+      {
+        subject: `Prospection B2B externalisée — ${company}`,
         body: `Bonjour ${firstName},
 
 Je vous contacte car votre profil${role} chez ${company} correspond exactement aux personnes que nous accompagnons.
 
-Hatmada prend en charge toute votre prospection téléphonique B2B : ciblage, scripts, appels, et prise de RDV — pour que vos équipes se concentrent uniquement sur la closing.
+Hatmada prend en charge toute votre prospection téléphonique B2B : ciblage, scripts, appels, et prise de RDV — pour que vos équipes se concentrent uniquement sur le closing.
 
 Seriez-vous disponible pour un échange de 20 min cette semaine ?
 
 Cordialement,
 Raphaël
 Hatmada
-hatmadaprospection.com`,
+https://hatmadaprospection.com`,
       },
     ];
 
@@ -135,19 +139,39 @@ hatmadaprospection.com`,
 
     setFile(uploadedFile);
     setUploading(true);
+    setWarnings([]);
 
     const reader = new FileReader();
     reader.onload = (evt) => {
       try {
         const data = evt.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
+        const workbook = XLSX.read(data, { type: 'array' });
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+
+        const warningsList: string[] = [];
+        rows.forEach((row, i) => {
+          const rowNum = i + 2;
+          const emailVal = (row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '').toString().trim();
+          const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
+          const nom = (row['Nom'] || row['NOM'] || '').toString().trim();
+          const societe = (row['Société'] || row['Societe'] || row['société'] || row['SOCIÉTÉ'] || '').toString().trim();
+          const label = prenom || nom || emailVal || `ligne ${rowNum}`;
+          if (!emailVal) {
+            warningsList.push(`Ligne ${rowNum} (${label}) — Email manquant, ligne ignorée.`);
+          } else if (!emailVal.includes('@') || !emailVal.includes('.')) {
+            warningsList.push(`Ligne ${rowNum} — Email invalide "${emailVal}", ligne ignorée.`);
+          } else {
+            if (!prenom && !nom) warningsList.push(`Ligne ${rowNum} (${emailVal}) — Prénom et Nom manquants, email généré sans nom.`);
+            if (!societe) warningsList.push(`Ligne ${rowNum} (${emailVal}) — Société manquante, email généré sans société.`);
+          }
+        });
+        setWarnings(warningsList);
 
         const parsed: EmailRecord[] = rows
           .filter((row) => {
             const emailVal = row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '';
-            return emailVal.toString().includes('@');
+            return emailVal.toString().includes('@') && emailVal.toString().includes('.');
           })
           .map((row, index) => {
             const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
@@ -182,7 +206,7 @@ hatmadaprospection.com`,
         setUploading(false);
       }
     };
-    reader.readAsBinaryString(uploadedFile);
+    reader.readAsArrayBuffer(uploadedFile);
   };
 
   const handleSendEmail = async (email: EmailRecord) => {
@@ -264,6 +288,16 @@ hatmadaprospection.com`,
 
         {uploading && (
           <p style={{ marginTop: '1rem', textAlign: 'center', color: '#2563eb', fontWeight: 600 }}>Lecture du fichier et génération des emails...</p>
+        )}
+        {warnings.length > 0 && (
+          <div style={{ marginTop: '1rem', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: '0.5rem', padding: '1rem' }}>
+            <p style={{ fontWeight: 700, color: '#dc2626', marginBottom: '0.5rem' }}>⚠️ {warnings.length} avertissement{warnings.length > 1 ? 's' : ''} détecté{warnings.length > 1 ? 's' : ''}</p>
+            <ul style={{ margin: 0, paddingLeft: '1.25rem' }}>
+              {warnings.map((w, i) => (
+                <li key={i} style={{ color: '#b91c1c', fontSize: '0.875rem', marginBottom: '0.25rem' }}>{w}</li>
+              ))}
+            </ul>
+          </div>
         )}
       </div>
 
