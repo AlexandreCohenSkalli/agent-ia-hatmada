@@ -14,6 +14,7 @@
     "axios": "^1.6.0",
     "bcryptjs": "^2.4.3",
     "date-fns": "^2.30.0",
+    "imapflow": "^1.2.13",
     "jsonwebtoken": "^9.0.0",
     "lucide-react": "^0.294.0",
     "next": "^14.0.0",

@@ -91,6 +91,10 @@ export async function POST(request: NextRequest) {
       subject,
       html: htmlBody,
       text: emailBody.replace(/<[^>]*>/g, ''), // Plain text version
+      // Set Message-ID so replies can be matched back to this emailId
+      messageId: emailId
+        ? `<hatmada-${emailId}@${(process.env.SMTP_USER || 'hatmada').split('@')[1] || 'hatmada.app'}>`
+        : undefined,
     });
 
     console.log('Email sent:', info.messageId);

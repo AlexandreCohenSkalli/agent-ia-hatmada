@@ -72,10 +72,12 @@ export default function CoachingPage() {
         done++;
         setBulkProgress({ done, total: pending.length });
         addStats({ sent: 1 });
-        const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+        const nowIso = new Date().toISOString();
+        const nowFr = new Date().toLocaleString('fr-FR');
+        const updated = { ...email, status: 'sent' as const, sentAt: nowFr, sentAtIso: nowIso };
         saveSentEmail(updated);
         setEmails(prev => prev.map(e =>
-          e.id === email.id ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') } : e
+          e.id === email.id ? { ...e, status: 'sent', sentAt: nowFr, sentAtIso: nowIso } : e
         ));
       } catch (err) {
         console.error('Erreur envoi', email.prospectEmail, err);
@@ -98,7 +100,7 @@ export default function CoachingPage() {
 
 Je me permets de vous contacter car j'accompagne de nombreux ${role} dans des structures comme ${company} pour transformer leurs équipes commerciales.
 
-Beaucoup de mes clients nous contactent pour un problème commun : des commerciaux qui fuient le téléphone, un pipeline qui se vide, et un écart de performance trop fort entre les meilleurs et les autres.
+Beaucoup de nos clients nous contactent pour un problème commun : des commerciaux qui fuient le téléphone, une pipeline qui se vide, et un écart de performance trop fort entre les meilleurs et les autres.
 
 Chez HATMADA, on forme vos équipes de vente avec une approche 100% terrain et mesurable :
 • Cold Call Mastery — vos commerciaux décrochent plus de rendez-vous qualifiés
@@ -230,11 +232,13 @@ https://hatmadacoaching.com`,
       });
       if (!res.ok) throw new Error('Erreur envoi');
       addStats({ sent: 1 });
-      const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+      const nowIso = new Date().toISOString();
+      const nowFr = new Date().toLocaleString('fr-FR');
+      const updated = { ...email, status: 'sent' as const, sentAt: nowFr, sentAtIso: nowIso };
       saveSentEmail(updated);
       setEmails(emails.map(e =>
         e.id === email.id
-          ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') }
+          ? { ...e, status: 'sent', sentAt: nowFr, sentAtIso: nowIso }
           : e
       ));
     } catch (err) {

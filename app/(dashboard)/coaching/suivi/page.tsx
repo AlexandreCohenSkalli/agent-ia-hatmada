@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, X } from 'lucide-react';
 
 const SENT_KEY = 'hatmada_sent_coaching';
@@ -16,6 +16,7 @@ interface SentEmail {
   emailBody: string;
   status: 'sent' | 'replied';
   sentAt?: string;
+  sentAtIso?: string;
   linkedinUrl?: string;
 }
 
@@ -25,8 +26,11 @@ export default function SuiviCoachingPage() {
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'sent' | 'replied'>('all');
   const [selected, setSelected] = useState<SentEmail | null>(null);
+  const [liveStatus, setLiveStatus] = useState<'connecting' | 'live' | 'polling' | 'off'>('off');
+  const [lastReplyAt, setLastReplyAt] = useState<string | null>(null);
+  const [replyBodies, setReplyBodies] = useState<Record<string, string>>({});
 
-  const loadData = () => {
+  const loadData = useCallback(() => {
     try {
       const list = JSON.parse(localStorage.getItem(SENT_KEY) || '[]');
       setEmails(list);
@@ -40,21 +44,83 @@ export default function SuiviCoachingPage() {
         setOpenStatus({});
       }
     } catch {}
-  };
+  }, []);
 
-  useEffect(() => { loadData(); }, []);
-
-  const handleMarkReplied = (emailId: string) => {
+  /** Auto-mark an email as replied (from SSE or poll) and sync localStorage + stats */
+  const applyReply = useCallback((emailId: string, repliedAt?: string, replyBody?: string) => {
+    // Always update body if provided (new parse may be better)
+    if (replyBody) setReplyBodies(prev => ({ ...prev, [emailId]: replyBody }));
     setEmails(prev => {
+      const existing = prev.find(e => e.id === emailId);
+      if (!existing || existing.status === 'replied') return prev;
       const next = prev.map(e => e.id === emailId ? { ...e, status: 'replied' as const } : e);
       localStorage.setItem(SENT_KEY, JSON.stringify(next));
       try {
         const s = JSON.parse(localStorage.getItem(STATS_KEY) || '{}');
         localStorage.setItem(STATS_KEY, JSON.stringify({ ...s, replied: (s.replied || 0) + 1 }));
       } catch {}
+      setLastReplyAt(repliedAt || new Date().toISOString());
       return next;
     });
-    if (selected?.id === emailId) setSelected(prev => prev ? { ...prev, status: 'replied' } : null);
+    setSelected(prev => prev?.id === emailId ? { ...prev, status: 'replied' } : prev);
+  }, []);
+
+  /** Poll /api/emails/check-replies every 30 s */
+  const pollReplies = useCallback(() => {
+    try {
+      const list: SentEmail[] = JSON.parse(localStorage.getItem(SENT_KEY) || '[]');
+      const emailsToCheck = list.filter(e => e.id).map(e => ({ id: e.id, subject: e.emailSubject, prospectEmail: e.prospectEmail, sentAtIso: e.sentAtIso }));
+      if (emailsToCheck.length === 0) return;
+      fetch('/api/emails/check-replies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails: emailsToCheck }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          const replyStatus: Record<string, any> = data.replyStatus || {};
+          emailsToCheck.forEach(e => { if (replyStatus[e.id]) applyReply(e.id, replyStatus[e.id].repliedAt, replyStatus[e.id].replyBody); });
+        })
+        .catch(() => {});
+    } catch {}
+  }, [applyReply]);
+
+  useEffect(() => {
+    loadData();
+
+    // --- Server-Sent Events – real-time reply push ---
+    setLiveStatus('connecting');
+    const es = new EventSource('/api/emails/replies-stream');
+
+    es.onopen = () => setLiveStatus('live');
+    es.onerror = () => setLiveStatus('polling');
+    es.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        if (data.type === 'reply' && data.emailId) {
+          applyReply(data.emailId, data.repliedAt, data.replyBody);
+        } else if (data.type === 'snapshot') {
+          Object.entries(data.replies || {}).forEach(([id, info]: [string, any]) => {
+            applyReply(id, info.repliedAt, info.replyBody);
+          });
+        }
+      } catch {}
+    };
+
+    // --- Polling fallback every 30 s ---
+    pollReplies();
+    const pollInterval = setInterval(pollReplies, 30_000);
+
+    return () => {
+      es.close();
+      clearInterval(pollInterval);
+      setLiveStatus('off');
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const handleMarkReplied = (emailId: string) => {
+    applyReply(emailId);
   };
 
   const filtered = emails.filter(e => {
@@ -77,17 +143,28 @@ export default function SuiviCoachingPage() {
   return (
     <div style={{ padding: '2rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b' }}>Suivi — Coaching HATMADA</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b' }}>Suivi — Coaching HATMADA</h1>
+          {liveStatus !== 'off' && (
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: liveStatus === 'live' ? '#16a34a' : liveStatus === 'connecting' ? '#d97706' : '#6366f1', background: liveStatus === 'live' ? '#dcfce7' : '#fef9c3', padding: '0.25rem 0.625rem', borderRadius: '99px' }}>
+              {liveStatus === 'live' ? '● Live' : liveStatus === 'connecting' ? '○ Connexion...' : '↻ Polling 30s'}
+            </span>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button onClick={loadData}
+          <button onClick={() => { loadData(); pollReplies(); }}
             style={{ padding: '0.5rem 1rem', background: '#f0fdf4', color: '#16a34a', border: '1px solid #bbf7d0', borderRadius: '0.5rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}>
             ↻ Actualiser
           </button>
           <button onClick={() => {
             if (!confirm('Réinitialiser tout le suivi Coaching ? Cette action est irréversible.')) return;
+            const ids = (JSON.parse(localStorage.getItem(SENT_KEY) || '[]') as SentEmail[]).map(e => e.id);
+            if (ids.length > 0) fetch(`/api/emails/check-replies?ids=${ids.join(',')}`, { method: 'DELETE' }).catch(() => {});
             localStorage.removeItem(SENT_KEY);
             setEmails([]);
             setOpenStatus({});
+            setLastReplyAt(null);
+            setReplyBodies({});
           }}
             style={{ padding: '0.5rem 1rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '0.5rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}>
             Réinitialiser le suivi
@@ -95,6 +172,14 @@ export default function SuiviCoachingPage() {
         </div>
       </div>
       <p style={{ color: '#64748b', marginBottom: '1.5rem' }}>{emails.length} email{emails.length > 1 ? 's' : ''} envoyé{emails.length > 1 ? 's' : ''} au total</p>
+
+      {/* Notification nouvelle réponse */}
+      {lastReplyAt && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#f0fdf4', border: '1px solid #86efac', borderRadius: '0.625rem', padding: '0.75rem 1rem', marginBottom: '1rem' }}>
+          <span style={{ color: '#15803d', fontWeight: 600, fontSize: '0.9375rem' }}>🎉 Nouvelle réponse reçue ! Mise à jour automatique effectuée.</span>
+          <button onClick={() => setLastReplyAt(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6b7280', fontSize: '0.875rem' }}>✕</button>
+        </div>
+      )}
 
       {/* Filtres */}
       <div style={{ display: 'flex', gap: '1rem', marginBottom: '1.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
@@ -116,7 +201,7 @@ export default function SuiviCoachingPage() {
         {(['all', 'sent', 'replied'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', border: filter === f ? 'none' : '1px solid #e2e8f0', background: filter === f ? 'linear-gradient(to right, #16a34a, #059669)' : 'white', color: filter === f ? 'white' : '#475569' }}>
-            {f === 'all' ? `Tous (${emails.length})` : f === 'sent' ? `Envoyés (${emails.filter(e => e.status === 'sent').length})` : `Réponses (${emails.filter(e => e.status === 'replied').length})`}
+            {f === 'all' ? `Tous (${emails.length})` : f === 'sent' ? `Envoyés (${emails.length})` : `Réponses (${emails.filter(e => e.status === 'replied').length})`}
           </button>
         ))}
       </div>
@@ -138,6 +223,9 @@ export default function SuiviCoachingPage() {
                   <p style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>{email.prospectEmail}</p>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                  {email.status === 'replied' && (
+                    <span style={{ padding: '0.25rem 0.75rem', borderRadius: '99px', background: '#dcfce7', color: '#166534', fontSize: '0.8125rem', fontWeight: 600 }}>Envoyé</span>
+                  )}
                   <span style={{ padding: '0.25rem 0.75rem', borderRadius: '99px', background: s.bg, color: s.color, fontSize: '0.8125rem', fontWeight: 600 }}>{statusLabel(email.status)}</span>
                   {openStatus[email.id] && (
                     <span title={`Ouvert ${openStatus[email.id]!.count} fois · ${new Date(openStatus[email.id]!.openedAt).toLocaleString('fr-FR')}`}
@@ -179,9 +267,18 @@ export default function SuiviCoachingPage() {
               <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Sujet : <strong style={{ color: '#1e293b' }}>{selected.emailSubject}</strong></p>
               {selected.sentAt && <p style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>Envoyé le {selected.sentAt}</p>}
             </div>
-            <div style={{ background: '#f8fafc', borderRadius: '0.5rem', padding: '1rem', whiteSpace: 'pre-wrap', color: '#374151', fontSize: '0.9375rem', lineHeight: 1.6, border: '1px solid #e2e8f0' }}>
+            <p style={{ fontWeight: 700, color: '#374151', marginBottom: '0.5rem', fontSize: '0.875rem' }}>📤 Email envoyé</p>
+            <div style={{ background: '#f8fafc', borderRadius: '0.5rem', padding: '1rem', whiteSpace: 'pre-wrap', color: '#374151', fontSize: '0.9375rem', lineHeight: 1.6, border: '1px solid #e2e8f0', marginBottom: replyBodies[selected.id] ? '1.25rem' : 0 }}>
               {selected.emailBody}
             </div>
+            {replyBodies[selected.id] && (
+              <>
+                <p style={{ fontWeight: 700, color: '#7c3aed', marginBottom: '0.5rem', fontSize: '0.875rem', marginTop: '0' }}>💬 Réponse reçue</p>
+                <div style={{ background: '#faf5ff', borderRadius: '0.5rem', padding: '1rem', whiteSpace: 'pre-wrap', color: '#374151', fontSize: '0.9375rem', lineHeight: 1.6, border: '1px solid #d8b4fe' }}>
+                  {replyBodies[selected.id]}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

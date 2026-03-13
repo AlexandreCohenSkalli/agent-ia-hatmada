@@ -1,41 +1,131 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { BarChart3, Mail, CheckCircle, Eye } from 'lucide-react';
 
 const STATS_KEY = 'hatmada_stats';
+const SENT_P_KEY = 'hatmada_sent_prospection';
+const SENT_C_KEY = 'hatmada_sent_coaching';
 
 export default function DashboardPage() {
   const [sent, setSent] = useState(0);
   const [replied, setReplied] = useState(0);
   const [opened, setOpened] = useState(0);
+  const [liveStatus, setLiveStatus] = useState<'connecting' | 'live' | 'polling' | 'off'>('off');
+  const sseRef = useRef<EventSource | null>(null);
+
+  const getSentIds = (): string[] => {
+    try {
+      const p = JSON.parse(localStorage.getItem(SENT_P_KEY) || '[]');
+      const c = JSON.parse(localStorage.getItem(SENT_C_KEY) || '[]');
+      return [...p, ...c].map((e: any) => e.id).filter(Boolean);
+    } catch { return []; }
+  };
+
+  const load = () => {
+    // Compute all counts directly from the actual lists (single source of truth)
+    try {
+      const p: any[] = JSON.parse(localStorage.getItem(SENT_P_KEY) || '[]');
+      const c: any[] = JSON.parse(localStorage.getItem(SENT_C_KEY) || '[]');
+      const all = [...p, ...c];
+      const sentCount = all.length;
+      const repliedCount = all.filter(e => e.status === 'replied').length;
+      setSent(sentCount);
+      setReplied(repliedCount);
+      // Keep stats key in sync
+      const s = JSON.parse(localStorage.getItem(STATS_KEY) || '{}');
+      localStorage.setItem(STATS_KEY, JSON.stringify({ ...s, sent: sentCount, replied: repliedCount }));
+      // Fetch open count
+      const ids = all.map(e => e.id).filter(Boolean);
+      if (ids.length > 0) {
+        fetch(`/api/emails/track/status?ids=${ids.join(',')}`)
+          .then(r => r.json())
+          .then(data => {
+            const count = Object.values(data.status || {}).filter(Boolean).length;
+            setOpened(count);
+          })
+          .catch(() => {});
+      } else {
+        setOpened(0);
+      }
+    } catch {}
+  };
+
+  /** Called when a new reply is detected (SSE or polling). Syncs localStorage + state. */
+  const applyReply = (emailId: string) => {
+    let changed = false;
+    [SENT_P_KEY, SENT_C_KEY].forEach(key => {
+      try {
+        const list: any[] = JSON.parse(localStorage.getItem(key) || '[]');
+        const idx = list.findIndex((e: any) => e.id === emailId);
+        if (idx !== -1 && list[idx].status !== 'replied') {
+          list[idx].status = 'replied';
+          localStorage.setItem(key, JSON.stringify(list));
+          changed = true;
+        }
+      } catch {}
+    });
+    // Recount from source of truth instead of incrementing
+    if (changed) load();
+  };
+
+  /** Poll /api/emails/check-replies every 30 s to detect IMAP-based replies */
+  const pollReplies = () => {
+    try {
+      const p: any[] = JSON.parse(localStorage.getItem(SENT_P_KEY) || '[]');
+      const c: any[] = JSON.parse(localStorage.getItem(SENT_C_KEY) || '[]');
+      const emailsToCheck = [...p, ...c].filter(e => e.id).map(e => ({ id: e.id, subject: e.emailSubject, prospectEmail: e.prospectEmail, sentAtIso: e.sentAtIso }));
+      if (emailsToCheck.length === 0) return;
+      fetch('/api/emails/check-replies', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails: emailsToCheck }),
+      })
+        .then(r => r.json())
+        .then(data => {
+          const replyStatus: Record<string, any> = data.replyStatus || {};
+          emailsToCheck.forEach(e => { if (replyStatus[e.id]) applyReply(e.id); });
+          load();
+        })
+        .catch(() => {});
+    } catch {}
+  };
 
   useEffect(() => {
-    const load = () => {
+    load();
+    window.addEventListener('focus', load);
+
+    // --- Server-Sent Events for real-time push ---
+    setLiveStatus('connecting');
+    const es = new EventSource('/api/emails/replies-stream');
+    sseRef.current = es;
+
+    es.onopen = () => setLiveStatus('live');
+    es.onerror = () => setLiveStatus('polling');
+    es.onmessage = (e) => {
       try {
-        const s = JSON.parse(localStorage.getItem(STATS_KEY) || '{}');
-        setSent(s.sent || 0);
-        setReplied(s.replied || 0);
-      } catch {}
-      // Fetch open count from tracking API
-      try {
-        const p = JSON.parse(localStorage.getItem('hatmada_sent_prospection') || '[]');
-        const c = JSON.parse(localStorage.getItem('hatmada_sent_coaching') || '[]');
-        const ids = [...p, ...c].map((e: any) => e.id).filter(Boolean);
-        if (ids.length > 0) {
-          fetch(`/api/emails/track/status?ids=${ids.join(',')}`)
-            .then(r => r.json())
-            .then(data => {
-              const count = Object.values(data.status || {}).filter(Boolean).length;
-              setOpened(count);
-            })
-            .catch(() => {});
+        const data = JSON.parse(e.data);
+        if (data.type === 'reply' && data.emailId) {
+          applyReply(data.emailId);
+        } else if (data.type === 'snapshot') {
+          const ids = getSentIds();
+          ids.forEach(id => { if (data.replies?.[id]) applyReply(id); });
+          load();
         }
       } catch {}
     };
-    load();
-    window.addEventListener('focus', load);
-    return () => window.removeEventListener('focus', load);
+
+    // --- Polling fallback every 30 s ---
+    pollReplies();
+    const pollInterval = setInterval(pollReplies, 30_000);
+
+    return () => {
+      window.removeEventListener('focus', load);
+      es.close();
+      clearInterval(pollInterval);
+      setLiveStatus('off');
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const stats = [
@@ -46,14 +136,27 @@ export default function DashboardPage() {
   ];
   const icons = [<Mail size={24}/>, <BarChart3 size={24}/>, <CheckCircle size={24}/>, <Eye size={24}/>];
 
+  const liveLabel = liveStatus === 'live' ? '● Live' : liveStatus === 'connecting' ? '○ Connexion...' : liveStatus === 'polling' ? '↻ Polling 30s' : '';
+  const liveColor = liveStatus === 'live' ? '#16a34a' : liveStatus === 'connecting' ? '#d97706' : '#6366f1';
+
   return (
     <div style={{ padding: '2rem' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b' }}>Tableau de Bord</h1>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b' }}>Tableau de Bord</h1>
+          {liveStatus !== 'off' && (
+            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: liveColor, background: liveStatus === 'live' ? '#dcfce7' : '#fef9c3', padding: '0.25rem 0.625rem', borderRadius: '99px' }}>
+              {liveLabel}
+            </span>
+          )}
+        </div>
         <button
-          onClick={() => {
-            if (!confirm('Réinitialiser toutes les statistiques ?')) return;
-            localStorage.removeItem(STATS_KEY);
+          onClick={async () => {
+            if (!confirm('Réinitialiser toutes les statistiques et le suivi ?')) return;
+            // Clear server reply store entirely
+            await fetch('/api/emails/check-replies', { method: 'DELETE' }).catch(() => {});
+            // Clear all local lists and stats
+            [STATS_KEY, SENT_P_KEY, SENT_C_KEY].forEach(k => localStorage.removeItem(k));
             setSent(0);
             setReplied(0);
             setOpened(0);

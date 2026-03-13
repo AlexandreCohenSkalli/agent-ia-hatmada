@@ -99,7 +99,7 @@ export default function ProspectionPage() {
 
 Je me permets de vous contacter car nous accompagnons des structures comme ${company} dans le développement de leur pipeline commercial.
 
-Hatmada externalise la prospection B2B : nos équipes gèrent les appels à froid pour vous livrer des RDV avec des décideurs qualifiés — résultats en quelques semaines, pas des mois.
+Hatmada externalise la prospection B2B : nos équipes gèrent les cold call pour vous livrer des RDV avec des décideurs qualifiés — résultats en quelques semaines, pas des mois.
 
 Ce qui nous différencie :
 • Tous les appels sont enregistrés et analysés par IA
@@ -225,11 +225,13 @@ https://hatmadaprospection.com`,
       });
       if (!res.ok) throw new Error('Erreur envoi');
       addStats({ sent: 1 });
-      const updated = { ...email, status: 'sent' as const, sentAt: new Date().toLocaleString('fr-FR') };
+      const nowIso = new Date().toISOString();
+      const nowFr = new Date().toLocaleString('fr-FR');
+      const updated = { ...email, status: 'sent' as const, sentAt: nowFr, sentAtIso: nowIso };
       saveSentEmail(updated);
       setEmails(emails.map(e =>
         e.id === email.id
-          ? { ...e, status: 'sent', sentAt: new Date().toLocaleString('fr-FR') }
+          ? { ...e, status: 'sent', sentAt: nowFr, sentAtIso: nowIso }
           : e
       ));
     } catch (err) {
