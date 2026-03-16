@@ -87,50 +87,46 @@ export default function ProspectionPage() {
     setBulkProgress(null);
   };
 
-  const generateEmail = (prenom: string, societe: string, fonction: string): { subject: string; body: string } => {
-    const firstName = prenom || 'Madame/Monsieur';
-    const company = societe || 'votre entreprise';
-    const role = fonction ? ` en tant que ${fonction}` : '';
+  const generateEmails = async (emailRecords: EmailRecord[]) => {
+    try {
+      const prospects = emailRecords.map(e => ({
+        name: e.prospectName,
+        email: e.prospectEmail,
+        company: e.companyName,
+        industry: e.fonction || 'Unknown',
+        type: 'prospection' as const,
+      }));
 
-    const templates = [
-      {
-        subject: `${company} × Hatmada — RDV qualifiés B2B`,
-        body: `Bonjour ${firstName},
+      const res = await fetch('/api/emails/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prospects, type: 'prospection' }),
+      });
 
-Je me permets de vous contacter car nous accompagnons des structures comme ${company} dans le développement de leur pipeline commercial.
+      if (!res.ok) {
+        throw new Error('Email generation failed');
+      }
 
-Hatmada externalise la prospection B2B : nos équipes gèrent les cold call pour vous livrer des RDV avec des décideurs qualifiés — résultats en quelques semaines, pas des mois.
+      const { emails } = await res.json();
+      
+      // Update emails with generated content
+      const updated = emailRecords.map(record => {
+        const generated = emails.find((e: any) => e.prospectEmail === record.prospectEmail);
+        if (generated) {
+          return {
+            ...record,
+            emailSubject: generated.emailSubject,
+            emailBody: generated.emailBody,
+          };
+        }
+        return record;
+      });
 
-Ce qui nous différencie :
-• Tous les appels sont enregistrés et analysés par IA
-• Taux de conversion supérieur aux canaux classiques
-• ROI 100% mesurable et transparent
-
-Seriez-vous disponible pour un échange de 20 min cette semaine ?
-
-Cordialement,
-Raphaël
-Hatmada
-https://hatmadaprospection.com`,
-      },
-      {
-        subject: `Prospection B2B externalisée — ${company}`,
-        body: `Bonjour ${firstName},
-
-Je vous contacte car votre profil${role} chez ${company} correspond exactement aux personnes que nous accompagnons.
-
-Hatmada prend en charge toute votre prospection téléphonique B2B : ciblage, scripts, appels, et prise de RDV — pour que vos équipes se concentrent uniquement sur le closing.
-
-Seriez-vous disponible pour un échange de 20 min cette semaine ?
-
-Cordialement,
-Raphaël
-Hatmada
-https://hatmadaprospection.com`,
-      },
-    ];
-
-    return templates[Math.floor(Math.random() * templates.length)];
+      return updated;
+    } catch (error) {
+      console.error('Error generating emails:', error);
+      return emailRecords;
+    }
   };
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,7 +138,7 @@ https://hatmadaprospection.com`,
     setWarnings([]);
 
     const reader = new FileReader();
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
         const data = evt.target?.result;
         const workbook = XLSX.read(data, { type: 'array' });
@@ -182,7 +178,6 @@ https://hatmadaprospection.com`,
             const linkedin = (row['URL LinkedIn'] || row['LinkedIn'] || row['Linkedin'] || '').toString().trim();
             const site = (row['Site Internet'] || row['Site Web'] || row['Website'] || '').toString().trim();
             const fullName = [prenom, nom].filter(Boolean).join(' ') || 'Prospect';
-            const { subject, body } = generateEmail(prenom, societe, fonction);
 
             return {
               id: `row-${index}`,
@@ -193,12 +188,21 @@ https://hatmadaprospection.com`,
               linkedinUrl: linkedin || undefined,
               siteWeb: site || undefined,
               status: 'pending',
-              emailSubject: subject,
-              emailBody: body,
+              emailSubject: 'Génération en cours...',
+              emailBody: 'Génération en cours...',
             } satisfies EmailRecord;
           });
 
         setEmails(parsed);
+        
+        // Generate emails via API
+        try {
+          const generated = await generateEmails(parsed);
+          setEmails(generated);
+        } catch (error) {
+          console.error('Error generating emails:', error);
+          alert('Erreur lors de la génération des emails. Veuillez réessayer.');
+        }
       } catch (err) {
         console.error('Erreur lecture XLSX', err);
         alert('Impossible de lire le fichier. Vérifiez que c\'est bien un .xlsx valide.');

@@ -141,15 +141,35 @@ async function checkImapReplies(emails: EmailRef[]): Promise<{ emailId: string; 
         }
 
         // --- Method 2: Subject "Re: {original subject}" ---
-        // STRICT: must be an actual reply (has In-Reply-To) AND sender must match AND arrived after sentAt
+        // STRICT validation:
+        // - Must be an actual reply (has In-Reply-To)
+        // - Sender must match
+        // - If sentAt is known: reply MUST arrive after sending (no guessing)
+        // - If sentAt is missing: only accept if within 7 days (avoid old replies)
         if (isActualReply && rawSubject.toLowerCase().startsWith('re:')) {
           const base = normaliseSubject(rawSubject);
           const candidates = subjectMap.get(base) || [];
           for (const { id, prospectEmail } of candidates) {
             if (detected.find(d => d.emailId === id)) continue;
             const { sentAt } = idToProspect.get(id) || { sentAt: null };
-            const dateOk = !sentAt || !msgDate || msgDate > sentAt;
-            if (prospectEmail && fromEmail === prospectEmail.toLowerCase() && dateOk) {
+            
+            // Check sender match first (required)
+            if (!prospectEmail || fromEmail !== prospectEmail.toLowerCase()) continue;
+            
+            // Date validation logic:
+            let dateOk = false;
+            if (sentAt && msgDate) {
+              // If we know when email was sent: reply MUST be after sending
+              dateOk = msgDate > sentAt;
+            } else if (!sentAt && msgDate) {
+              // If no sent date recorded: only accept replies from last 7 days
+              // (this prevents matching ancient replies)
+              const sevenDaysAgo = new Date();
+              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+              dateOk = msgDate > sevenDaysAgo;
+            }
+            
+            if (dateOk) {
               detected.push({ emailId: id, fromEmail, subject: rawSubject, replyBody: rawBody || undefined });
             }
           }

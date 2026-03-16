@@ -88,56 +88,47 @@ export default function CoachingPage() {
     setBulkProgress(null);
   };
 
-  const generateEmail = (prenom: string, societe: string, fonction: string): { subject: string; body: string } => {
-    const firstName = prenom || 'Madame/Monsieur';
-    const company = societe || 'votre entreprise';
-    const role = fonction ? ` en tant que ${fonction}` : '';
 
-    const templates = [
-      {
-        subject: `Former vos commerciaux — ${company}`,
-        body: `Bonjour ${firstName},
+  const generateEmails = async (emailRecords: EmailRecord[]) => {
+    try {
+      const prospects = emailRecords.map(e => ({
+        name: e.prospectName,
+        email: e.prospectEmail,
+        company: e.companyName,
+        industry: e.fonction || 'Unknown',
+        type: 'coaching' as const,
+      }));
 
-Je me permets de vous contacter car j'accompagne de nombreux ${role} dans des structures comme ${company} pour transformer leurs équipes commerciales.
+      const res = await fetch('/api/emails/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prospects, type: 'coaching' }),
+      });
 
-Beaucoup de nos clients nous contactent pour un problème commun : des commerciaux qui fuient le téléphone, une pipeline qui se vide, et un écart de performance trop fort entre les meilleurs et les autres.
+      if (!res.ok) {
+        throw new Error('Email generation failed');
+      }
 
-Chez HATMADA, on forme vos équipes de vente avec une approche 100% terrain et mesurable :
-• Cold Call Mastery — vos commerciaux décrochent plus de rendez-vous qualifiés
-• De la Découverte au Closing — cycle de vente plus court, taux de closing en hausse
-• Coaching à l'heure — accompagnement sur-mesure post-formation
+      const { emails } = await res.json();
+      
+      // Update emails with generated content
+      const updated = emailRecords.map(record => {
+        const generated = emails.find((e: any) => e.prospectEmail === record.prospectEmail);
+        if (generated) {
+          return {
+            ...record,
+            emailSubject: generated.emailSubject,
+            emailBody: generated.emailBody,
+          };
+        }
+        return record;
+      });
 
-Nos clients observent en moyenne +32% de rendez-vous et +19% de CA après formation.
-
-Seriez-vous disponible pour un échange de 30 min cette semaine pour discuter de vos besoins?
-
-Cordialement,
-Raphaël
-HATMADA — Formation Commerciale
-https://hatmadacoaching.com`,
-      },
-      {
-        subject: `Vos commerciaux closent-ils assez vite ? — ${company}`,
-        body: `Bonjour ${firstName},
-
-J'ai regardé le profil de ${company} et je pense qu'on peut avoir un échange intéressant.
-
-Si vos commerciaux${role} passent des semaines sur un deal qui devrait se conclure en jours, si votre téléphone sonne moins que prévu ou si votre pipeline manque de leads qualifiés — c'est exactement ce qu'on règle chez HATMADA.
-
-Simon Nabet, notre formateur, a construit et managé des équipes de vente jusqu'à 70 commerciaux. Il a formé 500+ commerciaux avec des résultats mesurés : +32% de RDV, +19% de CA, 98,7% de satisfaction.
-
-La méthode est simple : audit terrain, formation présentielle 100% sur mesure, puis coaching post-formation pour ancrer les habitudes.
-
-Un audit offert de 30 min pour évaluer le potentiel de vos équipes ?
-
-Cordialement,
-Raphaël
-HATMADA — Formation Commerciale
-https://hatmadacoaching.com`,
-      },
-    ];
-
-    return templates[Math.floor(Math.random() * templates.length)];
+      return updated;
+    } catch (error) {
+      console.error('Error generating emails:', error);
+      return emailRecords;
+    }
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -189,7 +180,6 @@ https://hatmadacoaching.com`,
             const linkedin = (row['URL LinkedIn'] || row['LinkedIn'] || row['Linkedin'] || '').toString().trim();
             const site = (row['Site Internet'] || row['Site Web'] || row['Website'] || '').toString().trim();
             const fullName = [prenom, nom].filter(Boolean).join(' ') || 'Prospect';
-            const { subject, body } = generateEmail(prenom, societe, fonction);
 
             return {
               id: `row-${index}`,
@@ -200,12 +190,23 @@ https://hatmadacoaching.com`,
               linkedinUrl: linkedin || undefined,
               siteWeb: site || undefined,
               status: 'pending',
-              emailSubject: subject,
-              emailBody: body,
+              emailSubject: 'Génération en cours...',
+              emailBody: 'Génération en cours...',
             } satisfies EmailRecord;
           });
 
         setEmails(parsed);
+        
+        // Generate emails via API
+        (async () => {
+          try {
+            const generated = await generateEmails(parsed);
+            setEmails(generated);
+          } catch (error) {
+            console.error('Error generating emails:', error);
+            alert('Erreur lors de la génération des emails. Veuillez réessayer.');
+          }
+        })();
       } catch (err) {
         console.error('Erreur lecture XLSX', err);
         alert("Impossible de lire le fichier. Vérifiez que c'est bien un .xlsx valide.");

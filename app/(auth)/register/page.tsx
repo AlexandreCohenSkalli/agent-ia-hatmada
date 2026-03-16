@@ -1,18 +1,17 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Mail, Lock, User, AlertCircle } from 'lucide-react';
+import { Mail, Lock, User, AlertCircle, CheckCircle } from 'lucide-react';
 
 export default function RegisterPage() {
-  const router = useRouter();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [success, setSuccess] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -44,15 +43,43 @@ export default function RegisterPage() {
         return;
       }
 
-      // Store token and redirect
-      localStorage.setItem('authToken', data.token);
-      router.push('/dashboard');
+      // Show success message - user must wait for approval
+      setSuccess(true);
+      setName('');
+      setEmail('');
+      setPassword('');
+      setConfirmPassword('');
     } catch (err) {
       setError('Une erreur est survenue. Veuillez réessayer.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Success screen
+  if (success) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center px-4">
+        <div className="card w-full max-w-md">
+          <div className="text-center">
+            <CheckCircle className="w-16 h-16 text-green-600 mx-auto mb-4" />
+            <h1 className="heading-2 mb-4">Inscription réussie !</h1>
+            <p className="text-gray-600 mb-6">
+              Votre compte a été créé. Un administrateur va examiner votre demande dans les prochaines heures.
+            </p>
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-6">
+              <p className="text-sm text-blue-900">
+                <strong>Prochaine étape :</strong> Attendez la validation d'un administrateur. Vous recevrez une confirmation par email.
+              </p>
+            </div>
+            <Link href="/login" className="btn-primary w-full">
+              Retour à la connexion
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-600 to-purple-700 flex items-center justify-center px-4">

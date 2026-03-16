@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { prisma } from '@/lib/prisma';
 
-// Hardcoded admin account (no database needed)
+// Hardcoded admin account (always allowed)
 const ADMIN_USER = {
   id: 'admin-1',
   name: 'Admin HATMADA',
@@ -23,15 +24,49 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check against hardcoded admin
-    if (email !== ADMIN_USER.email) {
+    // Try admin account first
+    if (email === ADMIN_USER.email) {
+      const passwordMatch = await bcrypt.compare(password, ADMIN_USER.password);
+      if (!passwordMatch) {
+        return NextResponse.json(
+          { error: 'Email ou mot de passe incorrect' },
+          { status: 401 }
+        );
+      }
+
+      const token = jwt.sign(
+        { userId: ADMIN_USER.id, email: ADMIN_USER.email, role: 'admin' },
+        process.env.JWT_SECRET || 'hatmada_secret_key_2026',
+        { expiresIn: '30d' }
+      );
+
+      return NextResponse.json({
+        token,
+        user: { id: ADMIN_USER.id, name: ADMIN_USER.name, email: ADMIN_USER.email, role: 'admin' },
+      });
+    }
+
+    // Try regular users from database
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
       return NextResponse.json(
         { error: 'Email ou mot de passe incorrect' },
         { status: 401 }
       );
     }
 
-    const passwordMatch = await bcrypt.compare(password, ADMIN_USER.password);
+    // Check if user is approved
+    if (!user.approved) {
+      return NextResponse.json(
+        { error: 'Votre compte est en attente d\'approbation par un administrateur' },
+        { status: 403 }
+      );
+    }
+
+    const passwordMatch = await bcrypt.compare(password, user.password);
     if (!passwordMatch) {
       return NextResponse.json(
         { error: 'Email ou mot de passe incorrect' },
@@ -40,14 +75,14 @@ export async function POST(request: NextRequest) {
     }
 
     const token = jwt.sign(
-      { userId: ADMIN_USER.id, email: ADMIN_USER.email, role: ADMIN_USER.role },
-      process.env.JWT_SECRET || 'hatmada_secret_key_2026',
+      { userId: user.id, email: user.email },
+      process.env.JWT_SECRET || 'your_secret_key',
       { expiresIn: '30d' }
     );
 
     return NextResponse.json({
       token,
-      user: { id: ADMIN_USER.id, name: ADMIN_USER.name, email: ADMIN_USER.email },
+      user: { id: user.id, name: user.name, email: user.email },
     });
   } catch (error) {
     console.error('Login error:', error);

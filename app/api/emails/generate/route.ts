@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
 });
 
 interface ProspectData {
@@ -26,7 +26,7 @@ export async function POST(request: NextRequest) {
 
     const generatedEmails = await Promise.all(
       prospects.map((prospect: ProspectData) =>
-        generateEmailWithClaude(prospect, type)
+        generateEmailWithOpenAI(prospect, type)
       )
     );
 
@@ -40,10 +40,12 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function generateEmailWithClaude(
+async function generateEmailWithOpenAI(
   prospect: ProspectData,
   type: 'prospection' | 'coaching'
 ): Promise<any> {
+  const website = type === 'prospection' ? 'hatmadaprospection.com' : 'hatmadacoaching.com';
+  
   const serviceInfo =
     type === 'prospection'
       ? `
@@ -54,18 +56,20 @@ YOU ARE SELLING: HATMADA Prospection Service
 - Target: SMEs/Scale-ups (€2M-€80M)
 - Best for: Companies with good products but struggling with sales pipeline
 - Problems solved: Pipe leakage, low conversion, costly SDR management, inaccurate targeting
+- Website: ${website}
 `
       : `
-YOU ARE SELLING: Hatmada Coaching Service
-- All-in-one platform for professional coaches (do NOT mention "Coaching.com" in the email — refer only to "nos services" or "notre plateforme")
-- Components: Education (certifications, masterclasses), Software (client management, scheduling), Marketplace (coaches can list themselves), Community (1800+ global coaches)
-- Key benefits: Complete solution, continuous learning, business growth, solitude elimination, scalability
-- Target: Individual coaches, coaching companies, HR departments
-- Best for: Coaches wanting to build and scale their practice
-- Problems solved: Lack of tools, isolation, difficulty finding clients, limited growth potential
+YOU ARE SELLING: HATMADA Coaching Service
+- Professional sales training and coaching for sales teams and entrepreneurs
+- Services: Cold call mastery training, sales technique certification, closing strategy, sales pipeline management, post-training coaching
+- Key benefits: Proven methodology, results tracked (avg +32% meetings, +19% revenue), customizable programs, ongoing support post-training
+- Target: Sales directors, sales managers, CEOs/founders, HR departments, companies with sales teams
+- Best for: Companies struggling with sales pipeline, low conversion rates, underperforming teams, or rapid scaling
+- Problems solved: Sales reps avoiding calls, weak closing skills, inconsistent processes, high turnover, pipeline leakage, poor sales culture
+- Website: ${website}
 `;
 
-  const prompt = `You are an expert B2B sales expert generating personalized cold emails.
+  const prompt = `You are an expert B2B sales expert generating personalized cold emails in French.
 
 ${serviceInfo}
 
@@ -76,18 +80,19 @@ PROSPECT INFORMATION:
 - Industry/Sector: ${prospect.industry || 'Unknown'}
 
 INSTRUCTIONS:
-1. Analyze the prospect's industry/company type to determine relevance
-2. Write a personalized, engaging cold email subject line (max 60 chars)
-3. Write an email body (3-5 paragraphs) that:
+1. Write the email in FRENCH
+2. Analyze the prospect's industry/company type to determine relevance
+3. Write a personalized, engaging cold email subject line (max 60 chars)
+4. Write an email body (3-5 paragraphs) that:
    - Opens with a relevant hook based on company type
    - Shows understanding of their potential needs
    - Presents your service as the solution
    - Creates urgency or clear next step
    - Keeps professional but conversational tone
    - Uses short sentences and paragraphs
-   - NEVER mention "Coaching.com" anywhere in the email — use "nos services" or "notre plateforme" instead
-   - Always sign the email as: "Raphaël\nHatmada" — never use "[Votre nom]" or any placeholder
-4. Response format MUST be exact JSON:
+   - Include the website URL (${website}) in the email signature
+   - Always sign the email as: "Raphaël\nHatmada"
+5. Response format MUST be exact JSON (no markdown, no backticks):
 
 {
   "subject": "Email subject here",
@@ -96,8 +101,8 @@ INSTRUCTIONS:
 
 Generate the email now. Remember: personalization based on company type is critical.`;
 
-  const message = await anthropic.messages.create({
-    model: 'claude-3-5-sonnet-20241022',
+  const message = await openai.chat.completions.create({
+    model: 'gpt-4o-mini',
     max_tokens: 1024,
     messages: [
       {
@@ -108,8 +113,7 @@ Generate the email now. Remember: personalization based on company type is criti
   });
 
   // Extract text from the response
-  const responseText =
-    message.content[0].type === 'text' ? message.content[0].text : '';
+  const responseText = message.choices[0].message.content || '';
 
   try {
     // Try to parse JSON from the response

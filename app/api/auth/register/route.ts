@@ -1,9 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
-
-// Mock database - In production, use Prisma
-const users: any[] = [];
+import { prisma } from '@/lib/prisma';
 
 export async function POST(request: NextRequest) {
   try {
@@ -17,8 +14,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if user exists (mock check)
-    const userExists = users.some(u => u.email === email);
+    // Check if user exists
+    const userExists = await prisma.user.findUnique({
+      where: { email },
+    });
+
     if (userExists) {
       return NextResponse.json(
         { error: 'Cet email est déjà enregistré' },
@@ -29,33 +29,30 @@ export async function POST(request: NextRequest) {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Create user (mock)
-    const user = {
-      id: Math.random().toString(36).substr(2, 9),
-      name,
-      email,
-      password: hashedPassword,
-      createdAt: new Date(),
-    };
+    // Create user (NOT approved by default)
+    const user = await prisma.user.create({
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        approved: false,  // new users need admin approval
+      },
+    });
 
-    users.push(user);
-
-    // Generate JWT token
-    const token = jwt.sign(
-      { userId: user.id, email: user.email },
-      process.env.JWT_SECRET || 'your_secret_key',
-      { expiresIn: '30d' }
-    );
-
+    // Return success but note that approval is required
     return NextResponse.json({
-      token,
-      user: { id: user.id, name: user.name, email: user.email },
+      success: true,
+      message: 'Inscription réussie ! En attente d\'approbation par un administrateur.',
+      userId: user.id,
+      email: user.email,
     });
   } catch (error) {
-    console.error('Registration error:', error);
+    console.error('Register error:', error);
     return NextResponse.json(
       { error: 'Erreur lors de l\'inscription' },
       { status: 500 }
     );
+  } finally {
+    await prisma.$disconnect();
   }
 }
