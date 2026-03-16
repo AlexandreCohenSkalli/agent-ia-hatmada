@@ -7,7 +7,7 @@ import { prisma } from '@/lib/prisma';
 const ADMIN_USER = {
   id: 'admin-1',
   name: 'Admin HATMADA',
-  email: 'admin@hatmada.com',
+  email: 'alexcoh07@gmail.com',
   // Password: hatmada2026
   password: '$2a$10$bKcTlgkn7UqddD7LwVRvnuoF3yjGwqtzmRAu4NrzYzvFy3lbRNMgG',
   role: 'admin',
@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Try admin account first
+    // Try admin account first - ONLY alexcoh07@gmail.com can be admin
     if (email === ADMIN_USER.email) {
       const passwordMatch = await bcrypt.compare(password, ADMIN_USER.password);
       if (!passwordMatch) {
@@ -33,6 +33,7 @@ export async function POST(request: NextRequest) {
           { status: 401 }
         );
       }
+      // Admin account found and password correct
 
       const token = jwt.sign(
         { userId: ADMIN_USER.id, email: ADMIN_USER.email, role: 'admin' },
@@ -40,10 +41,12 @@ export async function POST(request: NextRequest) {
         { expiresIn: '30d' }
       );
 
-      return NextResponse.json({
+      const response = NextResponse.json({
         token,
         user: { id: ADMIN_USER.id, name: ADMIN_USER.name, email: ADMIN_USER.email, role: 'admin' },
       });
+      response.cookies.set('authToken', token, { httpOnly: false, maxAge: 30 * 24 * 60 * 60 });
+      return response;
     }
 
     // Try regular users from database
@@ -80,10 +83,12 @@ export async function POST(request: NextRequest) {
       { expiresIn: '30d' }
     );
 
-    return NextResponse.json({
+    const response = NextResponse.json({
       token,
       user: { id: user.id, name: user.name, email: user.email },
     });
+    response.cookies.set('authToken', token, { httpOnly: false, maxAge: 30 * 24 * 60 * 60 });
+    return response;
   } catch (error) {
     console.error('Login error:', error);
     return NextResponse.json(

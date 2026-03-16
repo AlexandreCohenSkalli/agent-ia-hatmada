@@ -128,8 +128,12 @@ export default function SuiviCoachingPage() {
       e.prospectName.toLowerCase().includes(search.toLowerCase()) ||
       e.companyName.toLowerCase().includes(search.toLowerCase()) ||
       e.prospectEmail.toLowerCase().includes(search.toLowerCase());
-    const matchFilter = filter === 'all' || e.status === filter;
+    const matchFilter = filter === 'all' || (filter === 'sent' ? e.status !== 'replied' : e.status === filter);
     return matchSearch && matchFilter;
+  }).sort((a, b) => {
+    const dateA = new Date(a.sentAtIso || a.sentAt || '').getTime();
+    const dateB = new Date(b.sentAtIso || b.sentAt || '').getTime();
+    return dateB - dateA;
   });
 
   const statusStyle = (status: string) =>
@@ -201,7 +205,7 @@ export default function SuiviCoachingPage() {
         {(['all', 'sent', 'replied'] as const).map(f => (
           <button key={f} onClick={() => setFilter(f)}
             style={{ padding: '0.5rem 1.125rem', borderRadius: '0.5rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer', border: filter === f ? 'none' : '1px solid #e2e8f0', background: filter === f ? 'linear-gradient(to right, #16a34a, #059669)' : 'white', color: filter === f ? 'white' : '#475569' }}>
-            {f === 'all' ? `Tous (${emails.length})` : f === 'sent' ? `Envoyés (${emails.length})` : `Réponses (${emails.filter(e => e.status === 'replied').length})`}
+            {f === 'all' ? `Tous (${emails.length})` : f === 'sent' ? `En attente (${emails.filter(e => e.status !== 'replied').length})` : `Réponses (${emails.filter(e => e.status === 'replied').length})`}
           </button>
         ))}
       </div>

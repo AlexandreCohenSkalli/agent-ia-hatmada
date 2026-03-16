@@ -1,11 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { AlertCircle } from 'lucide-react';
 
 export default function LoginPage() {
-  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -33,8 +31,12 @@ export default function LoginPage() {
       // Store token in localStorage AND cookie (for middleware)
       localStorage.setItem('authToken', data.token);
       document.cookie = `authToken=${data.token}; path=/; max-age=2592000`;
-      // Force full page reload so middleware picks up the cookie
-      window.location.href = '/dashboard';
+      // Redirect to admin users page if admin, otherwise dashboard
+      if (data.user && data.user.role === 'admin') {
+        window.location.href = '/dashboard/admin/users';
+      } else {
+        window.location.href = '/dashboard';
+      }
     } catch (err) {
       setError('Une erreur est survenue. Veuillez réessayer.');
     } finally {
@@ -92,7 +94,7 @@ export default function LoginPage() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               style={inputStyle}
-              placeholder="admin@hatmada.com"
+              placeholder="alexcoh07@gmail.com"
               required
             />
           </div>
@@ -117,6 +119,10 @@ export default function LoginPage() {
             {loading ? 'Connexion en cours...' : 'Se connecter'}
           </button>
         </form>
+
+        <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '1.75rem', paddingTop: '1rem', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8' }}>
+          Developped by Gavroch.Dev
+        </div>
       </div>
     </div>
   );

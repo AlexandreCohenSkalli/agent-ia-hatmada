@@ -1,11 +1,38 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Upload, Eye, AlertCircle, X } from 'lucide-react';
 import * as XLSX from 'xlsx';
 
 const STATS_KEY = 'hatmada_stats';
 const SENT_KEY = 'hatmada_sent_prospection';
+
+// Normalizer for column names - handles accents, case, and whitespace
+function normalizeColumnName(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .trim()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accents
+    .replace(/\s+/g, '') // Remove spaces
+    .replace(/[^a-z0-9]/g, ''); // Remove special chars
+}
+
+// Smart column detection - finds the right column even if order is different
+function detectColumnIndex(
+  headers: string[],
+  expectedValues: string[]
+): number {
+  const normalized = headers.map(h => normalizeColumnName(h));
+  const targetNormalized = expectedValues.map(normalizeColumnName);
+  
+  for (let i = 0; i < normalized.length; i++) {
+    if (targetNormalized.some(target => normalized[i] === target)) {
+      return i;
+    }
+  }
+  return -1;
+}
 
 function readStats() {
   try { return JSON.parse(localStorage.getItem(STATS_KEY) || '{}'); } catch { return {}; }
@@ -49,6 +76,34 @@ export default function ProspectionPage() {
   const [sendingBulk, setSendingBulk] = useState(false);
   const [bulkProgress, setBulkProgress] = useState<{ done: number; total: number } | null>(null);
   const [warnings, setWarnings] = useState<string[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+
+  // Load emails from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(SENT_KEY);
+    if (saved) {
+      try {
+        const loaded = JSON.parse(saved);
+        setEmails(loaded);
+      } catch (err) {
+        console.error('Error loading saved emails:', err);
+      }
+    }
+  }, []);
+
+  // Helper function to get days waiting
+  const getDaysWaiting = (sentAtStr?: string): number => {
+    if (!sentAtStr) return 0;
+    try {
+      const sentDate = new Date(sentAtStr);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - sentDate.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch {
+      return 0;
+    }
+  };
 
   const handleBulkSend = async () => {
     const count = Math.min(Math.max(1, parseInt(bulkCount) || 1), 100);
@@ -129,8 +184,20 @@ export default function ProspectionPage() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const uploadedFile = e.target.files?.[0];
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement> | React.DragEvent<HTMLDivElement>) => {
+    let uploadedFile: File | null = null;
+    
+    if ('dataTransfer' in e) {
+      // Drag and drop
+      e.preventDefault();
+      e.stopPropagation();
+      uploadedFile = e.dataTransfer.files?.[0] || null;
+      setDragActive(false);
+    } else {
+      // File input
+      uploadedFile = e.target.files?.[0] || null;
+    }
+
     if (!uploadedFile) return;
 
     setFile(uploadedFile);
@@ -145,14 +212,31 @@ export default function ProspectionPage() {
         const sheet = workbook.Sheets[workbook.SheetNames[0]];
         const rows: Record<string, string>[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
 
+        if (rows.length === 0) {
+          setWarnings(['Fichier vide']);
+          setUploading(false);
+          return;
+        }
+
+        // Get headers and detect columns intelligently
+        const headers = Object.keys(rows[0]);
+        const emailIdx = detectColumnIndex(headers, ['Email 1', 'Email', 'email', 'EMAIL']);
+        const prenomIdx = detectColumnIndex(headers, ['Prénom', 'Prenom', 'prénom', 'prenom']);
+        const nomIdx = detectColumnIndex(headers, ['Nom', 'NOM', 'nom']);
+        const societeIdx = detectColumnIndex(headers, ['Société', 'Societe', 'société', 'societe']);
+        const fonctionIdx = detectColumnIndex(headers, ['Fonction', 'FONCTION', 'fonction']);
+        const linkedinIdx = detectColumnIndex(headers, ['URL LinkedIn', 'LinkedIn', 'Linkedin', 'linkedin']);
+        const siteIdx = detectColumnIndex(headers, ['Site Internet', 'Site Web', 'Website', 'website']);
+
         const warningsList: string[] = [];
         rows.forEach((row, i) => {
           const rowNum = i + 2;
-          const emailVal = (row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '').toString().trim();
-          const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
-          const nom = (row['Nom'] || row['NOM'] || '').toString().trim();
-          const societe = (row['Société'] || row['Societe'] || row['société'] || row['SOCIÉTÉ'] || '').toString().trim();
+          const emailVal = (emailIdx >= 0 ? Object.values(row)[emailIdx] : '').toString().trim();
+          const prenom = (prenomIdx >= 0 ? Object.values(row)[prenomIdx] : '').toString().trim();
+          const nom = (nomIdx >= 0 ? Object.values(row)[nomIdx] : '').toString().trim();
+          const societe = (societeIdx >= 0 ? Object.values(row)[societeIdx] : '').toString().trim();
           const label = prenom || nom || emailVal || `ligne ${rowNum}`;
+          
           if (!emailVal) {
             warningsList.push(`Ligne ${rowNum} (${label}) — Email manquant, ligne ignorée.`);
           } else if (!emailVal.includes('@') || !emailVal.includes('.')) {
@@ -166,17 +250,17 @@ export default function ProspectionPage() {
 
         const parsed: EmailRecord[] = rows
           .filter((row) => {
-            const emailVal = row['Email 1'] || row['Email'] || row['email'] || row['EMAIL'] || '';
-            return emailVal.toString().includes('@') && emailVal.toString().includes('.');
+            const emailVal = emailIdx >= 0 ? Object.values(row)[emailIdx]?.toString() || '' : '';
+            return emailVal.includes('@') && emailVal.includes('.');
           })
           .map((row, index) => {
-            const prenom = (row['Prénom'] || row['Prenom'] || row['prénom'] || '').toString().trim();
-            const nom = (row['Nom'] || row['NOM'] || '').toString().trim();
-            const societe = (row['Société'] || row['Societe'] || row['société'] || row['SOCIÉTÉ'] || '').toString().trim();
-            const fonction = (row['Fonction'] || row['FONCTION'] || row['fonction'] || '').toString().trim();
-            const email = (row['Email 1'] || row['Email'] || row['email'] || '').toString().trim();
-            const linkedin = (row['URL LinkedIn'] || row['LinkedIn'] || row['Linkedin'] || '').toString().trim();
-            const site = (row['Site Internet'] || row['Site Web'] || row['Website'] || '').toString().trim();
+            const prenom = (prenomIdx >= 0 ? Object.values(row)[prenomIdx]?.toString() || '' : '').trim();
+            const nom = (nomIdx >= 0 ? Object.values(row)[nomIdx]?.toString() || '' : '').trim();
+            const societe = (societeIdx >= 0 ? Object.values(row)[societeIdx]?.toString() || '' : '').trim();
+            const fonction = (fonctionIdx >= 0 ? Object.values(row)[fonctionIdx]?.toString() || '' : '').trim();
+            const email = (emailIdx >= 0 ? Object.values(row)[emailIdx]?.toString() || '' : '').trim();
+            const linkedin = (linkedinIdx >= 0 ? Object.values(row)[linkedinIdx]?.toString() || '' : '').trim();
+            const site = (siteIdx >= 0 ? Object.values(row)[siteIdx]?.toString() || '' : '').trim();
             const fullName = [prenom, nom].filter(Boolean).join(' ') || 'Prospect';
 
             return {
@@ -268,7 +352,7 @@ export default function ProspectionPage() {
   const getStatusLabel = (status: string) => {
     switch (status) {
       case 'pending': return 'En attente';
-      case 'sent': return 'Envoyé';
+      case 'sent': return 'Pas de réponse';
       case 'replied': return 'Réponse';
       default: return status;
     }
@@ -281,16 +365,54 @@ export default function ProspectionPage() {
       {/* Upload Section */}
       <div style={{ background: 'white', borderRadius: '0.875rem', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', marginBottom: '1.5rem', border: '2px dashed #bfdbfe' }}>
         <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: '0.5rem' }}>Importer une liste XLSX</h2>
-        <p style={{ color: '#64748b', marginBottom: '0.75rem', fontSize: '0.9375rem' }}>Colonnes reconnues : <strong>Prénom, Nom, Fonction, Société, Email 1</strong>, Autres emails, URL LinkedIn, Site Internet.</p>
+        <p style={{ color: '#64748b', marginBottom: '0.75rem', fontSize: '0.9375rem' }}>Colonnes reconnues : <strong>Prénom, Nom, Fonction, Société, Email</strong>, Autres emails, URL LinkedIn, Site Internet. (Ordre quelconque)</p>
 
-        <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '1rem', padding: '1.5rem', border: '2px dashed #cbd5e1', borderRadius: '0.5rem', cursor: 'pointer' }}>
-          <Upload size={24} color="#94a3b8" />
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '1rem',
+            padding: '2rem 1.5rem',
+            border: `2px dashed ${dragActive ? '#3b82f6' : '#cbd5e1'}`,
+            borderRadius: '0.5rem',
+            cursor: 'pointer',
+            background: dragActive ? '#eff6ff' : 'white',
+            transition: 'all 0.2s',
+          }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragActive(true);
+          }}
+          onDragLeave={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setDragActive(false);
+          }}
+          onDrop={(e) => {
+            handleFileUpload(e);
+          }}
+          onClick={() => {
+            const input = document.getElementById('file-input') as HTMLInputElement;
+            input?.click();
+          }}
+        >
+          <Upload size={24} color={dragActive ? '#3b82f6' : '#94a3b8'} />
           <div>
-            <p style={{ fontWeight: 600, color: '#374151' }}>{file ? file.name : 'Cliquez pour sélectionner un fichier'}</p>
+            <p style={{ fontWeight: 600, color: '#374151' }}>
+              {dragActive ? 'Déposez votre fichier...' : (file ? file.name : 'Glissez-déposez ou cliquez pour sélectionner')}
+            </p>
             <p style={{ fontSize: '0.8125rem', color: '#9ca3af' }}>Format: .xlsx</p>
           </div>
-          <input type="file" accept=".xlsx,.xls" onChange={handleFileUpload} style={{ display: 'none' }} />
-        </label>
+          <input
+            type="file"
+            accept=".xlsx,.xls"
+            onChange={handleFileUpload}
+            style={{ display: 'none' }}
+            id="file-input"
+          />
+        </div>
 
         {uploading && (
           <p style={{ marginTop: '1rem', textAlign: 'center', color: '#2563eb', fontWeight: 600 }}>Lecture du fichier et génération des emails...</p>
@@ -382,38 +504,55 @@ export default function ProspectionPage() {
       {emails.length > 0 && (
         <div>
           <h2 style={{ fontSize: '1.2rem', fontWeight: 700, color: '#1e293b', marginBottom: '1rem' }}>
-            Emails générés — {emails.length} prospect{emails.length > 1 ? 's' : ''}
+            Emails générés — {emails.filter(e => e.status === 'pending').length} prospect{emails.filter(e => e.status === 'pending').length > 1 ? 's' : ''}
           </h2>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-            {emails.map((email) => {
-              const s = getStatusColor(email.status);
-              return (
-                <div key={email.id} style={{ background: 'white', borderRadius: '0.75rem', padding: '1rem 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ fontWeight: 700, color: '#1e293b' }}>{email.prospectName}</p>
-                    <p style={{ fontSize: '0.8125rem', color: '#475569' }}>{email.fonction && `${email.fonction} · `}{email.companyName}</p>
-                    <p style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>{email.prospectEmail}</p>
-                  </div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
-                    <span style={{ padding: '0.25rem 0.75rem', borderRadius: '99px', background: s.bg, color: s.color, fontSize: '0.8125rem', fontWeight: 600 }}>{getStatusLabel(email.status)}</span>
-                    {email.sentAt && <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>{email.sentAt}</span>}
-                    {email.linkedinUrl && (
-                      <a href={email.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>in</a>
-                    )}
-                    {email.status === 'sent' && (
-                      <button onClick={() => handleMarkReplied(email.id)}
-                        style={{ padding: '0.375rem 0.75rem', background: '#f3e8ff', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '0.375rem', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}>
-                        Répondu ✓
+            {emails
+              .filter(e => e.status === 'pending')
+              .sort((a, b) => {
+                // Sort by days waiting (descending - oldest first)
+                if (a.status === 'sent' && b.status === 'sent') {
+                  return getDaysWaiting(b.sentAt) - getDaysWaiting(a.sentAt);
+                }
+                // Non-sent emails at the end
+                if (a.status !== 'sent' && b.status === 'sent') return 1;
+                if (a.status === 'sent' && b.status !== 'sent') return -1;
+                return 0;
+              })
+              .map((email) => {
+                const s = getStatusColor(email.status);
+                const daysWaiting = getDaysWaiting(email.sentAt);
+                return (
+                  <div key={email.id} style={{ background: 'white', borderRadius: '0.75rem', padding: '1rem 1.25rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontWeight: 700, color: '#1e293b' }}>{email.prospectName}</p>
+                      <p style={{ fontSize: '0.8125rem', color: '#475569' }}>{email.fonction && `${email.fonction} · `}{email.companyName}</p>
+                      <p style={{ fontSize: '0.8125rem', color: '#94a3b8' }}>{email.prospectEmail}</p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexShrink: 0 }}>
+                      <span style={{ padding: '0.25rem 0.75rem', borderRadius: '99px', background: s.bg, color: s.color, fontSize: '0.8125rem', fontWeight: 600 }}>{getStatusLabel(email.status)}</span>
+                      {email.sentAt && (
+                        <span style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
+                          {email.status === 'sent' ? `${daysWaiting}j` : email.sentAt}
+                        </span>
+                      )}
+                      {email.linkedinUrl && (
+                        <a href={email.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.75rem', color: '#2563eb', textDecoration: 'none', fontWeight: 600 }}>in</a>
+                      )}
+                      {email.status === 'sent' && (
+                        <button onClick={() => handleMarkReplied(email.id)}
+                          style={{ padding: '0.375rem 0.75rem', background: '#f3e8ff', color: '#7c3aed', border: '1px solid #d8b4fe', borderRadius: '0.375rem', fontWeight: 600, fontSize: '0.75rem', cursor: 'pointer' }}>
+                          Répondu ✓
+                        </button>
+                      )}
+                      <button onClick={() => { setSelectedEmail(email); setShowPreview(true); }}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0.875rem', background: 'linear-gradient(to right, #2563eb, #06b6d4)', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, color: 'white' }}>
+                        <Eye size={15} /> Aperçu &amp; Envoyer
                       </button>
-                    )}
-                    <button onClick={() => { setSelectedEmail(email); setShowPreview(true); }}
-                      style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0.875rem', background: 'linear-gradient(to right, #2563eb, #06b6d4)', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, color: 'white' }}>
-                      <Eye size={15} /> Aperçu &amp; Envoyer
-                    </button>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
           </div>
         </div>
       )}

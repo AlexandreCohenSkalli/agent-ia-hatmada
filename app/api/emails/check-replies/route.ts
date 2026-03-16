@@ -153,6 +153,9 @@ async function checkImapReplies(emails: EmailRef[]): Promise<{ emailId: string; 
             if (detected.find(d => d.emailId === id)) continue;
             const { sentAt } = idToProspect.get(id) || { sentAt: null };
             
+            // Skip messages from ourselves (user replying to their own email)
+            if (fromEmail === ownEmail) continue;
+            
             // Check sender match first (required)
             if (!prospectEmail || fromEmail !== prospectEmail.toLowerCase()) continue;
             
@@ -161,12 +164,9 @@ async function checkImapReplies(emails: EmailRef[]): Promise<{ emailId: string; 
             if (sentAt && msgDate) {
               // If we know when email was sent: reply MUST be after sending
               dateOk = msgDate > sentAt;
-            } else if (!sentAt && msgDate) {
-              // If no sent date recorded: only accept replies from last 7 days
-              // (this prevents matching ancient replies)
-              const sevenDaysAgo = new Date();
-              sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-              dateOk = msgDate > sevenDaysAgo;
+            } else if (!sentAt) {
+              // If no sent date recorded: REJECT (don't accept old replies)
+              dateOk = false;
             }
             
             if (dateOk) {

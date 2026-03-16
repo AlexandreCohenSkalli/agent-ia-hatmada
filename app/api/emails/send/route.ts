@@ -36,7 +36,7 @@ function getTransporter() {
 export async function POST(request: NextRequest) {
   try {
     const body: SendEmailRequest = await request.json();
-    const { to, subject, body: emailBody, fromName = 'ProspectAI', cc, bcc, emailId } = body;
+    const { to, subject, body: emailBody, fromName = 'Gavroch.dev.prospect', cc, bcc, emailId } = body;
 
     // Validate input
     if (!to || !subject || !emailBody) {
@@ -192,6 +192,6 @@ SETUP INSTRUCTIONS:
      "to": "recipient@example.com",
      "subject": "Test Email",
      "body": "<h1>Test</h1><p>This is a test</p>",
-     "fromName": "ProspectAI"
+     "fromName": "Gavroch.dev.prospect"
    }
 */

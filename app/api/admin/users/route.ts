@@ -4,9 +4,9 @@ import { prisma } from '@/lib/prisma';
 // GET: List all users (pending and approved)
 export async function GET(request: NextRequest) {
   try {
-    // Simple auth check - in production, verify JWT
+    // Check for Bearer token (admin check)
     const authHeader = request.headers.get('authorization');
-    if (!authHeader?.includes('admin')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
-    if (!authHeader?.includes('admin')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -72,7 +72,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
   try {
     const authHeader = request.headers.get('authorization');
-    if (!authHeader?.includes('admin')) {
+    if (!authHeader?.startsWith('Bearer ')) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 

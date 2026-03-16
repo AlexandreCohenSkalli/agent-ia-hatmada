@@ -41,3 +41,4 @@ Thumbs.db
 
 # Database
 prisma/migrations/
+/public/gavroch-logo.png

@@ -140,12 +140,12 @@ export default function DashboardPage() {
   const liveColor = liveStatus === 'live' ? '#16a34a' : liveStatus === 'connecting' ? '#d97706' : '#6366f1';
 
   return (
-    <div style={{ padding: '2rem' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2rem' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <h1 style={{ fontSize: '1.75rem', fontWeight: 700, color: '#1e293b' }}>Tableau de Bord</h1>
+    <div style={{ padding: '2.5rem', fontFamily: '"Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <h1 style={{ fontSize: '2rem', fontWeight: '300', letterSpacing: '-0.5px', color: '#0f172a' }}>Tableau de Bord</h1>
           {liveStatus !== 'off' && (
-            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: liveColor, background: liveStatus === 'live' ? '#dcfce7' : '#fef9c3', padding: '0.25rem 0.625rem', borderRadius: '99px' }}>
+            <span style={{ fontSize: '0.7rem', fontWeight: '600', color: liveColor, background: liveStatus === 'live' ? '#dcfce7' : '#fef9c3', padding: '0.375rem 0.75rem', borderRadius: '99px', letterSpacing: '0.3px' }}>
               {liveLabel}
             </span>
           )}
@@ -161,21 +161,37 @@ export default function DashboardPage() {
             setReplied(0);
             setOpened(0);
           }}
-          style={{ padding: '0.5rem 1rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '0.5rem', fontWeight: 600, fontSize: '0.875rem', cursor: 'pointer' }}
+          style={{ padding: '0.625rem 1.25rem', background: '#fef2f2', color: '#dc2626', border: '1px solid #fecaca', borderRadius: '0.625rem', fontWeight: '500', fontSize: '0.875rem', cursor: 'pointer', transition: 'all 0.2s', letterSpacing: '0.2px' }}
+          onMouseEnter={e => {
+            e.currentTarget.style.background = '#fee2e2';
+            e.currentTarget.style.transform = 'translateY(-1px)';
+          }}
+          onMouseLeave={e => {
+            e.currentTarget.style.background = '#fef2f2';
+            e.currentTarget.style.transform = 'translateY(0)';
+          }}
         >
-          Réinitialiser les stats
+          Réinitialiser
         </button>
       </div>
 
       {/* Stats Grid */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1.25rem', marginBottom: '2rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.5rem', marginBottom: '2.5rem' }}>
         {stats.map((stat, idx) => (
-          <div key={idx} style={{ background: 'white', borderRadius: '0.875rem', padding: '1.5rem', boxShadow: '0 2px 8px rgba(0,0,0,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div key={idx} style={{ background: 'white', borderRadius: '1rem', padding: '1.75rem', boxShadow: '0 4px 12px rgba(0,0,0,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', transition: 'all 0.3s ease', cursor: 'pointer' }}
+            onMouseEnter={e => {
+              e.currentTarget.style.boxShadow = '0 12px 24px rgba(0,0,0,0.1)';
+              e.currentTarget.style.transform = 'translateY(-4px)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}>
             <div>
-              <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '0.5rem' }}>{stat.title}</p>
-              <p style={{ fontSize: '2rem', fontWeight: 700, color: '#1e293b' }}>{stat.value}</p>
+              <p style={{ fontSize: '0.8125rem', color: '#64748b', marginBottom: '0.75rem', fontWeight: '500', letterSpacing: '0.2px' }}>{stat.title}</p>
+              <p style={{ fontSize: '2.25rem', fontWeight: '300', color: '#0f172a', letterSpacing: '-1px' }}>{stat.value}</p>
             </div>
-            <div style={{ width: '3rem', height: '3rem', borderRadius: '0.75rem', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color }}>
+            <div style={{ width: '3.5rem', height: '3.5rem', borderRadius: '0.875rem', background: stat.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: stat.color }}>
               {icons[idx]}
             </div>
           </div>
@@ -183,19 +199,48 @@ export default function DashboardPage() {
       </div>
 
       {/* Welcome Card */}
-      <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #bfdbfe', borderRadius: '0.875rem', padding: '2rem' }}>
-        <h2 style={{ fontSize: '1.25rem', fontWeight: 700, color: '#1e3a8a', marginBottom: '1rem' }}>Bienvenue sur ProspectAI 👋</h2>
-        <p style={{ color: '#475569', marginBottom: '1.5rem' }}>
-          Commencez par créer une nouvelle campagne de prospection ou de coaching.
+      <div style={{ background: 'linear-gradient(135deg, #eff6ff 0%, #f5f3ff 100%)', border: '1px solid #bfdbfe', borderRadius: '1.125rem', padding: '2.5rem', transition: 'all 0.3s ease' }}
+        onMouseEnter={e => {
+          e.currentTarget.style.boxShadow = '0 8px 24px rgba(59, 130, 246, 0.15)';
+          e.currentTarget.style.transform = 'translateY(-2px)';
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.boxShadow = 'none';
+          e.currentTarget.style.transform = 'translateY(0)';
+        }}>
+        <h2 style={{ fontSize: '1.5rem', fontWeight: '400', color: '#1e3a8a', marginBottom: '1rem', letterSpacing: '-0.3px' }}>Bienvenue sur AI Prospect By Gavroch.Dev 👋</h2>
+        <p style={{ color: '#475569', marginBottom: '1.75rem', fontSize: '0.9625rem', fontWeight: '300', lineHeight: '1.6' }}>
+          Commencez par créer une nouvelle campagne de prospection ou de coaching pour optimiser vos résultats commerciaux.
         </p>
-        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-          <a href="/prospection" style={{ padding: '0.75rem 1.5rem', background: 'linear-gradient(to right, #2563eb, #06b6d4)', color: 'white', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600, fontSize: '0.9375rem' }}>
+        <div style={{ display: 'flex', gap: '1.25rem', flexWrap: 'wrap' }}>
+          <a href="/prospection" style={{ padding: '0.75rem 1.75rem', background: 'linear-gradient(135deg, #2563eb, #1d4ed8)', color: 'white', borderRadius: '0.75rem', textDecoration: 'none', fontWeight: '500', fontSize: '0.9375rem', transition: 'all 0.2s', letterSpacing: '0.3px', display: 'inline-block', boxShadow: '0 4px 12px rgba(37, 99, 235, 0.3)' }}
+            onMouseEnter={e => {
+              e.currentTarget.style.boxShadow = '0 8px 20px rgba(37, 99, 235, 0.4)';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.boxShadow = '0 4px 12px rgba(37, 99, 235, 0.3)';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}>
             Prospection HATMADA
           </a>
-          <a href="/coaching" style={{ padding: '0.75rem 1.5rem', background: 'white', color: '#2563eb', border: '1.5px solid #2563eb', borderRadius: '0.5rem', textDecoration: 'none', fontWeight: 600, fontSize: '0.9375rem' }}>
+          <a href="/coaching" style={{ padding: '0.75rem 1.75rem', background: 'white', color: '#2563eb', border: '2px solid #2563eb', borderRadius: '0.75rem', textDecoration: 'none', fontWeight: '500', fontSize: '0.9375rem', transition: 'all 0.2s', letterSpacing: '0.3px', display: 'inline-block' }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = '#f0f9ff';
+              e.currentTarget.style.transform = 'translateY(-2px)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'white';
+              e.currentTarget.style.transform = 'translateY(0)';
+            }}>
             Coaching HATMADA
           </a>
         </div>
+      </div>
+
+      {/* Footer */}
+      <div style={{ borderTop: '1px solid #e2e8f0', marginTop: '3rem', paddingTop: '2rem', textAlign: 'center', fontSize: '0.75rem', color: '#94a3b8', fontWeight: '300', letterSpacing: '0.3px' }}>
+        Developped by Gavroch.Dev
       </div>
     </div>
   );

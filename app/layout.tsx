@@ -6,7 +6,7 @@ const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Prospect AI - Platform de Prospection IA",
-  description: "Plateforme intelligente pour l'envoi d'emails de prospection avec IA Claude",
+  description: "Plateforme intelligente pour l'envoi d'emails de prospection avec IA",
 };
 
 export default function RootLayout({
