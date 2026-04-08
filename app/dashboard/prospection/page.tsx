@@ -124,6 +124,9 @@ export default function ProspectionPage() {
             subject: email.emailSubject,
             body: email.emailBody,
             fromName: 'Raphaël — Hatmada',
+            emailId: email.id,
+            prospectName: email.prospectName,
+            companyName: email.companyName,
           }),
         });
         done++;
@@ -311,6 +314,8 @@ export default function ProspectionPage() {
           body: email.emailBody,
           fromName: 'Raphaël — Hatmada',
           emailId: email.id,
+          prospectName: email.prospectName,
+          companyName: email.companyName,
         }),
       });
       if (!res.ok) throw new Error('Erreur envoi');

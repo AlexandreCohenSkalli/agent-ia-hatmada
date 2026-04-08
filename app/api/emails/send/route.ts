@@ -23,6 +23,8 @@ interface SendEmailRequest {
   cc?: string[];
   bcc?: string[];
   emailId?: string;
+  prospectName?: string;
+  companyName?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -31,7 +33,7 @@ export async function POST(request: NextRequest) {
     if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
     const body: SendEmailRequest = await request.json();
-    const { to, subject, body: emailBody, fromName, cc, bcc, emailId } = body;
+    const { to, subject, body: emailBody, fromName, cc, bcc, emailId, prospectName, companyName } = body;
 
     if (!to || !subject || !emailBody) {
       return NextResponse.json({ error: 'to, subject, and body are required' }, { status: 400 });
@@ -96,6 +98,32 @@ export async function POST(request: NextRequest) {
     });
 
     console.log('Email sent:', info.messageId);
+
+    // Persist sent email to DB
+    try {
+      const recordData = {
+        userId,
+        prospectName: prospectName || to.split('@')[0],
+        prospectEmail: to,
+        companyName: companyName || to.split('@')[1]?.split('.')[0] || 'Inconnu',
+        companyType: 'prospect',
+        emailSubject: subject,
+        emailBody: emailBody,
+        status: 'sent',
+        sentAt: new Date(),
+      };
+      if (emailId) {
+        await prisma.emailRecord.upsert({
+          where: { id: emailId },
+          update: { status: 'sent', sentAt: new Date(), emailSubject: subject, emailBody: emailBody },
+          create: { id: emailId, ...recordData },
+        });
+      } else {
+        await prisma.emailRecord.create({ data: recordData });
+      }
+    } catch (dbErr) {
+      console.error('DB save error (non-blocking):', dbErr);
+    }
 
     return NextResponse.json({
       success: true,

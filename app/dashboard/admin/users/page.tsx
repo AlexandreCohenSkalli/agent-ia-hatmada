@@ -9,6 +9,7 @@ interface User {
   email: string;
   approved: boolean;
   createdAt: string;
+  _count?: { emails: number };
 }
 
 export default function AdminUsersPage() {
@@ -279,6 +280,11 @@ export default function AdminUsersPage() {
                     <p style={{ fontWeight: '600', color: '#1e293b', marginBottom: '0.25rem' }}>{user.name}</p>
                     <p style={{ fontSize: '0.875rem', color: '#4b5563' }}>{user.email}</p>
                   </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '1.5rem' }}>
+                    <div style={{ textAlign: 'center' }}>
+                      <p style={{ fontSize: '1.5rem', fontWeight: '700', color: '#2563eb', lineHeight: 1 }}>{user._count?.emails ?? 0}</p>
+                      <p style={{ fontSize: '0.7rem', color: '#94a3b8', marginTop: '0.25rem' }}>emails envoyés</p>
+                    </div>
                   <button
                     onClick={() => handleReject(user.id)}
                     style={{
@@ -301,6 +307,7 @@ export default function AdminUsersPage() {
                     <Trash2 size={16} />
                     Supprimer
                   </button>
+                  </div>
                 </div>
               ))}
             </div>

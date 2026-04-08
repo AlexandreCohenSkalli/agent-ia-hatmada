@@ -17,6 +17,11 @@ export async function GET(request: NextRequest) {
         email: true,
         approved: true,
         createdAt: true,
+        _count: {
+          select: {
+            emails: { where: { status: 'sent' } },
+          },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
