@@ -71,6 +71,8 @@ export default function CoachingPage() {
   const [emails, setEmails] = useState<EmailRecord[]>([]);
   const [selectedEmail, setSelectedEmail] = useState<EmailRecord | null>(null);
   const [showPreview, setShowPreview] = useState(false);
+  const [editSubject, setEditSubject] = useState('');
+  const [editBody, setEditBody] = useState('');
   const [sendingEmail, setSendingEmail] = useState(false);
   const [bulkCount, setBulkCount] = useState('10');
   const [sendingBulk, setSendingBulk] = useState(false);
@@ -473,7 +475,10 @@ export default function CoachingPage() {
             </div>
             <div style={{ background: '#f8fafc', borderRadius: '0.5rem', padding: '0.875rem 1rem', marginBottom: '1rem', display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
               <p style={{ fontSize: '0.875rem', color: '#64748b' }}>À : <strong style={{ color: '#1e293b' }}>{selectedEmail.prospectEmail}</strong></p>
-              <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Sujet : <strong style={{ color: '#1e293b' }}>{selectedEmail.emailSubject}</strong></p>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <span style={{ fontSize: '0.875rem', color: '#64748b', flexShrink: 0 }}>Sujet :</span>
+                <input value={editSubject} onChange={e => setEditSubject(e.target.value)} style={{ flex: 1, fontSize: '0.875rem', fontWeight: 600, color: '#1e293b', border: '1px solid #cbd5e1', borderRadius: '0.375rem', padding: '0.25rem 0.5rem', outline: 'none', background: 'white' }} />
+              </div>
               {selectedEmail.linkedinUrl && (
                 <a href={selectedEmail.linkedinUrl} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', color: '#2563eb' }}>🔗 LinkedIn</a>
               )}
@@ -481,11 +486,9 @@ export default function CoachingPage() {
                 <a href={selectedEmail.siteWeb} target="_blank" rel="noreferrer" style={{ fontSize: '0.8125rem', color: '#2563eb' }}>🌐 {selectedEmail.siteWeb}</a>
               )}
             </div>
-            <div style={{ background: '#f8fafc', borderRadius: '0.5rem', padding: '1rem', whiteSpace: 'pre-wrap', color: '#374151', fontSize: '0.9375rem', lineHeight: 1.6, marginBottom: '1.5rem', border: '1px solid #e2e8f0' }}>
-              {selectedEmail.emailBody}
-            </div>
+            <textarea value={editBody} onChange={e => setEditBody(e.target.value)} rows={12} style={{ width: '100%', background: '#f8fafc', borderRadius: '0.5rem', padding: '1rem', color: '#374151', fontSize: '0.9375rem', lineHeight: 1.6, marginBottom: '1.5rem', border: '1px solid #e2e8f0', resize: 'vertical', outline: 'none', fontFamily: 'inherit', boxSizing: 'border-box', display: 'block' }} />
             <div style={{ display: 'flex', gap: '1rem' }}>
-              <button onClick={() => { handleSendEmail(selectedEmail); setShowPreview(false); }} disabled={sendingEmail || selectedEmail.status !== 'pending'}
+              <button onClick={() => { const updated = { ...selectedEmail, emailSubject: editSubject, emailBody: editBody }; setEmails(prev => prev.map(e => e.id === updated.id ? updated : e)); handleSendEmail(updated); setShowPreview(false); }} disabled={sendingEmail || selectedEmail.status !== 'pending'}
                 style={{ flex: 1, padding: '0.875rem', background: selectedEmail.status !== 'pending' ? '#cbd5e1' : 'linear-gradient(to right, #16a34a, #059669)', color: 'white', border: 'none', borderRadius: '0.5rem', fontWeight: 600, cursor: selectedEmail.status !== 'pending' ? 'not-allowed' : 'pointer' }}>
                 {sendingEmail ? 'Envoi...' : 'Envoyer'}
               </button>
@@ -540,7 +543,7 @@ export default function CoachingPage() {
                           Répondu ✓
                         </button>
                       )}
-                      <button onClick={() => { setSelectedEmail(email); setShowPreview(true); }}
+                      <button onClick={() => { setSelectedEmail(email); setEditSubject(email.emailSubject); setEditBody(email.emailBody); setShowPreview(true); }}
                         style={{ display: 'flex', alignItems: 'center', gap: '0.375rem', padding: '0.5rem 0.875rem', background: 'linear-gradient(to right, #16a34a, #059669)', border: 'none', borderRadius: '0.5rem', cursor: 'pointer', fontSize: '0.875rem', fontWeight: 600, color: 'white' }}>
                         <Eye size={15} /> Aperçu &amp; Envoyer
                       </button>
