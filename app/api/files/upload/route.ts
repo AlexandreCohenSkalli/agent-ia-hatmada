@@ -1,6 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { writeFile } from 'fs/promises';
-import path from 'path';
 
 export async function POST(request: NextRequest) {
   try {
@@ -23,13 +21,8 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Convert file to buffer
-    const bytes = await file.arrayBuffer();
-    const buffer = Buffer.from(bytes);
-
     // Save file to temporary directory
     const fileName = `${Date.now()}-${file.name}`;
-    const filePath = path.join(process.cwd(), 'public', 'uploads', fileName);
 
     // For production, consider using cloud storage like S3
     // For now, we'll just echo back the file info

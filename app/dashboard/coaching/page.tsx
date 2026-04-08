@@ -317,6 +317,19 @@ export default function CoachingPage() {
     });
   };
 
+  const getDaysWaiting = (sentAtStr?: string): number => {
+    if (!sentAtStr) return 0;
+    try {
+      const sentDate = new Date(sentAtStr);
+      const now = new Date();
+      const diffTime = Math.abs(now.getTime() - sentDate.getTime());
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays;
+    } catch {
+      return 0;
+    }
+  };
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case 'pending': return { bg: '#fef9c3', color: '#854d0e' };
@@ -388,7 +401,7 @@ export default function CoachingPage() {
           <label
             htmlFor="file-input"
             style={{ cursor: 'pointer' }}
-            onClick={(e) => {
+            onClick={() => {
               const input = document.getElementById('file-input') as HTMLInputElement;
               input?.click();
             }}

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 // DEBUG ONLY - List all users with all fields
-export async function GET(request: NextRequest) {
+export async function GET(_request: NextRequest) {
   try {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: 'desc' },
