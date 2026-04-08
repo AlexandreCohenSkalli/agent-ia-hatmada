@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     const senderName = fromName || smtpConfig.fromName || 'HATMADA';
     const senderEmail = smtpConfig.senderEmail;
 
-    const appUrl = process.env.APP_URL || 'http://localhost:3000';
+    const appUrl = process.env.APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000');
     const pixelTag = emailId
       ? `<img src="${appUrl}/api/emails/track/open?id=${emailId}" width="1" height="1" style="display:block;width:1px;height:1px;" alt="" />`
       : '';
