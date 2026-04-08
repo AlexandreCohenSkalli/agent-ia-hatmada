@@ -1,10 +1,62 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { LogOut, Mail, Users, BarChart3 } from 'lucide-react';
+import { LogOut, Mail, Users, BarChart3, Settings } from 'lucide-react';
 import { jwtDecode } from 'jwt-decode';
+
+function AnimatedSphere({ size = 48 }: { size?: number }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    let animId: number;
+    let angle = 0;
+    const W = canvas.width = size;
+    const H = canvas.height = size;
+    const cx = W / 2, cy = H / 2;
+    const R = size * 0.42;
+    const colors = ['#3b82f6','#60a5fa','#06b6d4','#34d399','#818cf8','#a78bfa','#38bdf8','#93c5fd'];
+    const N = 180;
+    const dots = Array.from({ length: N }, (_, i) => {
+      const phi = Math.acos(-1 + (2 * i) / N);
+      const theta = Math.sqrt(N * Math.PI) * phi;
+      return { phi, theta, color: colors[i % colors.length], size: 0.6 + Math.random() * 0.8 };
+    });
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H);
+      const projected = dots.map(d => {
+        const x = Math.sin(d.phi) * Math.cos(d.theta + angle);
+        const y = Math.cos(d.phi);
+        const z = Math.sin(d.phi) * Math.sin(d.theta + angle);
+        const depth = (z + 1) / 2;
+        return { sx: cx + x * R, sy: cy + y * R * 0.92, depth, color: d.color, size: d.size };
+      }).sort((a, b) => a.depth - b.depth);
+      projected.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, p.size * (0.4 + p.depth * 0.9), 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = 0.15 + p.depth * 0.75;
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      angle += 0.005;
+      animId = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(animId);
+  }, [size]);
+  return (
+    <canvas
+      ref={canvasRef}
+      width={size}
+      height={size}
+      style={{ display: 'block', pointerEvents: 'none', flexShrink: 0 }}
+    />
+  );
+}
 
 interface PendingUser {
   id: string;
@@ -87,11 +139,11 @@ export default function DashboardLayout({
     <div style={{ display: 'flex', height: '100vh', background: '#fafbfc', fontFamily: '"Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       {/* Sidebar */}
       <aside style={{ width: '260px', background: 'linear-gradient(135deg, #0a3d7a 0%, #1a5fa0 50%, #0d4a99 100%)', color: 'white', padding: '2rem 1.5rem', display: 'flex', flexDirection: 'column', flexShrink: 0, boxShadow: '0 20px 40px rgba(0,0,0,0.15)' }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', marginBottom: '3rem', background: 'rgba(255,255,255,0.08)', padding: '0.875rem 1rem', borderRadius: '0.625rem' }}>
-          <img src="/gavroch-logo.png" alt="Gavroch" style={{ height: '40px', objectFit: 'contain', filter: 'brightness(1.1) drop-shadow(0 0 4px rgba(255,255,255,0.2))' }} />
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.125rem' }}>
-            <span style={{ fontSize: '0.75rem', fontWeight: '600', letterSpacing: '0.5px', color: 'rgba(255,255,255,0.95)' }}>AI PROSPECT</span>
-            <span style={{ fontSize: '0.65rem', fontWeight: '300', letterSpacing: '0.3px', color: 'rgba(255,255,255,0.7)' }}>by Gavroch.Dev</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '3rem', padding: '0.5rem 0' }}>
+          <AnimatedSphere size={48} />
+          <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.15 }}>
+            <span style={{ fontSize: '0.8rem', fontWeight: 700, letterSpacing: '0.08em', color: 'white', textTransform: 'uppercase' }}>AI PROSPECT</span>
+            <span style={{ fontSize: '0.65rem', fontWeight: 300, letterSpacing: '0.04em', color: 'rgba(255,255,255,0.6)' }}>By Gavroch.Dev</span>
           </div>
         </div>
 
@@ -154,6 +206,22 @@ export default function DashboardLayout({
             }}>
             <span style={{ fontSize: '0.75rem' }}>↳</span> Suivi &amp; Réponses
           </Link>
+
+          {/* Settings Section */}
+          <div style={{ borderTop: '1px solid rgba(255,255,255,0.15)', marginTop: '1.5rem', paddingTop: '1.5rem' }}>
+            <Link href="/dashboard/settings/email" style={{ display: 'flex', alignItems: 'center', gap: '0.875rem', padding: '0.75rem 1rem', borderRadius: '0.625rem', color: 'rgba(255,255,255,0.95)', textDecoration: 'none', fontSize: '0.9375rem', fontWeight: '400', letterSpacing: '0.2px', transition: 'all 0.2s ease-out' }}
+              onMouseEnter={e => {
+                e.currentTarget.style.background = 'rgba(255,255,255,0.15)';
+                e.currentTarget.style.transform = 'translateX(4px)';
+              }}
+              onMouseLeave={e => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.transform = 'translateX(0)';
+              }}>
+              <Settings size={20} />
+              <span>Paramètres Email</span>
+            </Link>
+          </div>
 
           {/* Admin Section */}
           {isAdmin && (

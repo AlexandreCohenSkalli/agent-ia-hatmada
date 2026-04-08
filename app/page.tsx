@@ -1,7 +1,53 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useEffect, useRef } from 'react';
 import { Zap, BarChart3, Users, Mail, LogIn } from 'lucide-react';
+
+function AnimatedSphere() {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d')!;
+    let animId: number;
+    let angle = 0;
+    const W = canvas.width = window.innerWidth;
+    const H = canvas.height = window.innerHeight;
+    const cx = W / 2, cy = H / 2;
+    const R = Math.min(W, H) * 0.28;
+    const colors = ['#3b82f6','#60a5fa','#06b6d4','#34d399','#818cf8','#a78bfa','#38bdf8','#93c5fd'];
+    const N = 220;
+    const dots = Array.from({ length: N }, (_, i) => {
+      const phi = Math.acos(-1 + (2 * i) / N);
+      const theta = Math.sqrt(N * Math.PI) * phi;
+      return { phi, theta, color: colors[i % colors.length], size: 1.5 + Math.random() * 2 };
+    });
+    const draw = () => {
+      ctx.clearRect(0, 0, W, H);
+      const projected = dots.map(d => {
+        const x = Math.sin(d.phi) * Math.cos(d.theta + angle);
+        const y = Math.cos(d.phi);
+        const z = Math.sin(d.phi) * Math.sin(d.theta + angle);
+        const depth = (z + 1) / 2;
+        return { sx: cx + x * R, sy: cy + y * R * 0.92, depth, color: d.color, size: d.size };
+      }).sort((a, b) => a.depth - b.depth);
+      projected.forEach(p => {
+        ctx.beginPath();
+        ctx.arc(p.sx, p.sy, p.size * (0.4 + p.depth * 0.9), 0, Math.PI * 2);
+        ctx.fillStyle = p.color;
+        ctx.globalAlpha = 0.15 + p.depth * 0.7;
+        ctx.fill();
+      });
+      ctx.globalAlpha = 1;
+      angle += 0.004;
+      animId = requestAnimationFrame(draw);
+    };
+    draw();
+    return () => cancelAnimationFrame(animId);
+  }, []);
+  return <canvas ref={canvasRef} style={{ position: 'fixed', inset: 0, width: '100%', height: '100%', pointerEvents: 'none', zIndex: 0 }} />;
+}
 
 export default function Home() {
   const router = useRouter();
@@ -16,16 +62,7 @@ export default function Home() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(160deg, #0a0f2e 0%, #0d1f5c 35%, #0a2a4a 65%, #071228 100%)', position: 'relative', overflow: 'hidden' }}>
-      {/* Logo Background */}
-      <div style={{ position: 'fixed', inset: 0, opacity: 0.08, pointerEvents: 'none', zIndex: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <img src="/logo.png" alt="HATMADA" style={{ width: '90vw', height: '90vh', objectFit: 'contain' }} />
-      </div>
-
-      {/* Glow effects */}
-      <div style={{ position: 'fixed', inset: 0, pointerEvents: 'none', zIndex: 0 }}>
-        <div style={{ position: 'absolute', top: '-10%', left: '20%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(37,99,235,0.15) 0%, transparent 70%)', borderRadius: '50%' }}></div>
-        <div style={{ position: 'absolute', bottom: '-10%', right: '20%', width: '500px', height: '500px', background: 'radial-gradient(circle, rgba(6,182,212,0.1) 0%, transparent 70%)', borderRadius: '50%' }}></div>
-      </div>
+      <AnimatedSphere />
 
       <div style={{ position: 'relative', zIndex: 10, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '1.5rem 1.5rem 1rem', minHeight: '85vh', width: '100%' }}>
         {/* Main Login Section - Centered */}

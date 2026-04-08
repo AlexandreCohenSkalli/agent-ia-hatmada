@@ -6,8 +6,9 @@ generator client {
 }
 
 datasource db {
-  provider = "sqlite"
-  url      = "file:./dev.db"
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 // User Model
@@ -16,15 +17,36 @@ model User {
   email     String     @unique
   name      String?
   password  String
-  approved  Boolean    @default(false)  // Admin must approve new users
+  approved  Boolean    @default(false)
   createdAt DateTime   @default(now())
   updatedAt DateTime   @updatedAt
 
   campaigns   Campaign[]
   emails      EmailRecord[]
   uploads     FileUpload[]
+  smtpConfig  SmtpConfig?
 
   @@map("users")
+}
+
+// SMTP Config per User
+model SmtpConfig {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  host        String
+  port        Int
+  secure      Boolean  @default(false)
+  smtpUser    String
+  smtpPass    String
+  fromName    String?
+  senderEmail String
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("smtp_configs")
 }
 
 // Campaign Model - Groups of prospects

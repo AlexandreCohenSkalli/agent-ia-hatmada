@@ -54,8 +54,9 @@ export async function POST(request: NextRequest) {
     // Send notification email to admin
     try {
       await transporter.sendMail({
-        from: process.env.SENDER_EMAIL || 'alexcoh07@gmail.com',
-        to: 'alexcoh07@gmail.com',
+        from: process.env.SENDER_EMAIL || process.env.ADMIN_EMAIL || '',
+        to: process.env.ADMIN_EMAIL || '',
+
         subject: `Nouvelle demande d'inscription - ${name}`,
         html: `
           <h2>Nouvelle demande d'inscription</h2>

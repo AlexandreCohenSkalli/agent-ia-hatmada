@@ -1,5 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
-import nodemailer from 'nodemailer'; // Will need to add this to package.json
+import nodemailer from 'nodemailer';
+import jwt from 'jsonwebtoken';
+import { prisma } from '@/lib/prisma';
+
+function getUserIdFromRequest(request: NextRequest): string | null {
+  const token = request.cookies.get('authToken')?.value
+    || request.headers.get('authorization')?.replace('Bearer ', '');
+  if (!token) return null;
+  try {
+    const decoded = jwt.verify(token, process.env.JWT_SECRET || 'hatmada_secret_key_2026') as any;
+    return decoded.userId;
+  } catch {
+    return null;
+  }
+}
 
 interface SendEmailRequest {
   to: string;
@@ -11,61 +25,47 @@ interface SendEmailRequest {
   emailId?: string;
 }
 
-// Initialize email transporter (for production)
-// You need to install nodemailer: npm install nodemailer @types/nodemailer
-let transporter: any = null;
-
-function getTransporter() {
-  if (transporter) return transporter;
-
-  // Example with Gmail SMTP
-  // For production, use environment variables
-  transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: parseInt(process.env.SMTP_PORT || '587'),
-    secure: process.env.SMTP_PORT === '465', // true for 465, false for other ports
-    auth: {
-      user: process.env.SMTP_USER,
-      pass: process.env.SMTP_PASS,
-    },
-  });
-
-  return transporter;
-}
-
 export async function POST(request: NextRequest) {
   try {
-    const body: SendEmailRequest = await request.json();
-    const { to, subject, body: emailBody, fromName = 'Gavroch.dev.prospect', cc, bcc, emailId } = body;
+    const userId = getUserIdFromRequest(request);
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Validate input
+    const body: SendEmailRequest = await request.json();
+    const { to, subject, body: emailBody, fromName, cc, bcc, emailId } = body;
+
     if (!to || !subject || !emailBody) {
+      return NextResponse.json({ error: 'to, subject, and body are required' }, { status: 400 });
+    }
+
+    // Get user's personal SMTP config
+    const smtpConfig = await prisma.smtpConfig.findUnique({ where: { userId } });
+    if (!smtpConfig) {
       return NextResponse.json(
-        { error: 'to, subject, and body are required' },
+        { error: 'Aucune configuration SMTP trouvée. Veuillez configurer votre email dans Paramètres.' },
         { status: 400 }
       );
     }
 
-    // Get transporter
-    const transporter = getTransporter();
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: { user: smtpConfig.smtpUser, pass: smtpConfig.smtpPass },
+    });
 
-    // For development/testing, you can use:
-    // const testAccount = await nodemailer.createTestAccount();
-    // This creates temporary email accounts for testing
+    const senderName = fromName || smtpConfig.fromName || 'HATMADA';
+    const senderEmail = smtpConfig.senderEmail;
 
-    // Tracking pixel URL
     const appUrl = process.env.APP_URL || 'http://localhost:3000';
     const pixelTag = emailId
       ? `<img src="${appUrl}/api/emails/track/open?id=${emailId}" width="1" height="1" style="display:block;width:1px;height:1px;" alt="" />`
       : '';
 
-    // Convert plain text to HTML (preserve line breaks and paragraphs)
     const toHtml = (text: string) => {
       const escaped = text
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;');
-      // Auto-link URLs
       const linked = escaped.replace(
         /(https?:\/\/[^\s<]+)/g,
         '<a href="$1" style="color:#2563eb;" target="_blank">$1</a>'
@@ -82,32 +82,20 @@ export async function POST(request: NextRequest) {
       ? emailBody.replace('</body>', `${pixelTag}</body>`)
       : toHtml(emailBody);
 
-    // Send email
     const info = await transporter.sendMail({
-      from: `"${fromName}" <${process.env.SENDER_EMAIL}>`,
+      from: `"${senderName}" <${senderEmail}>`,
       to,
       cc,
       bcc,
       subject,
       html: htmlBody,
-      text: emailBody.replace(/<[^>]*>/g, ''), // Plain text version
-      // Set Message-ID so replies can be matched back to this emailId
+      text: emailBody.replace(/<[^>]*>/g, ''),
       messageId: emailId
-        ? `<hatmada-${emailId}@${(process.env.SMTP_USER || 'hatmada').split('@')[1] || 'hatmada.app'}>`
+        ? `<hatmada-${emailId}@${senderEmail.split('@')[1] || 'hatmada.app'}>`
         : undefined,
     });
 
     console.log('Email sent:', info.messageId);
-
-    // Track email in database
-    // In production: save to your database
-    // await saveEmailRecord({
-    //   to,
-    //   subject,
-    //   status: 'sent',
-    //   sentAt: new Date(),
-    //   messageId: info.messageId,
-    // });
 
     return NextResponse.json({
       success: true,
@@ -118,80 +106,34 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error('Email sending error:', error);
-    return NextResponse.json(
-      { error: 'Failed to send email', details: String(error) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to send email', details: String(error) }, { status: 500 });
   }
 }
 
-// GET method to verify email configuration
+// GET: Verify current user's SMTP connection
 export async function GET(request: NextRequest) {
   try {
-    const transporter = getTransporter();
+    const userId = getUserIdFromRequest(request);
+    if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-    // Verify connection
+    const smtpConfig = await prisma.smtpConfig.findUnique({ where: { userId } });
+    if (!smtpConfig) return NextResponse.json({ error: 'Aucune configuration SMTP trouvée' }, { status: 404 });
+
+    const transporter = nodemailer.createTransport({
+      host: smtpConfig.host,
+      port: smtpConfig.port,
+      secure: smtpConfig.secure,
+      auth: { user: smtpConfig.smtpUser, pass: smtpConfig.smtpPass },
+    });
+
     await transporter.verify();
 
     return NextResponse.json({
       success: true,
       message: 'SMTP connection verified',
-      config: {
-        host: process.env.SMTP_HOST,
-        port: process.env.SMTP_PORT,
-        senderEmail: process.env.SENDER_EMAIL,
-      },
+      config: { host: smtpConfig.host, port: smtpConfig.port, senderEmail: smtpConfig.senderEmail },
     });
   } catch (error) {
-    console.error('SMTP verification error:', error);
-    return NextResponse.json(
-      { error: 'SMTP configuration error', details: String(error) },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'SMTP configuration error', details: String(error) }, { status: 500 });
   }
 }
-
-/*
-SETUP INSTRUCTIONS:
-
-1. Install nodemailer:
-   npm install nodemailer
-   npm install -D @types/nodemailer
-
-2. For Gmail:
-   a. Enable 2-factor authentication
-   b. Generate an "App Password" (not your regular password)
-   c. Add to .env.local:
-      SMTP_HOST=smtp.gmail.com
-      SMTP_PORT=587
-      SMTP_USER=your-email@gmail.com
-      SMTP_PASS=your-16-char-app-password
-
-3. For SendGrid:
-   a. Get API key from SendGrid
-   b. Add to .env.local:
-      SMTP_HOST=smtp.sendgrid.net
-      SMTP_PORT=587
-      SMTP_USER=apikey
-      SMTP_PASS=your-sendgrid-api-key
-
-4. For AWS SES:
-   a. Setup AWS credentials
-   b. Add to .env.local:
-      SMTP_HOST=email-smtp.region.amazonaws.com
-      SMTP_PORT=587
-      SMTP_USER=your-smtp-username
-      SMTP_PASS=your-smtp-password
-
-5. Testing:
-   GET /api/emails/send  <- Will verify SMTP connection
-   POST /api/emails/send <- Send email
-   
-   Body:
-   {
-     "to": "recipient@example.com",
-     "subject": "Test Email",
-     "body": "<h1>Test</h1><p>This is a test</p>",
-     "fromName": "Gavroch.dev.prospect"
-   }
-*/

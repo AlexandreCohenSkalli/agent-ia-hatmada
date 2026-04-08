@@ -12,6 +12,7 @@ export default function DashboardPage() {
   const [replied, setReplied] = useState(0);
   const [opened, setOpened] = useState(0);
   const [liveStatus, setLiveStatus] = useState<'connecting' | 'live' | 'polling' | 'off'>('off');
+  const [smtpConfigured, setSmtpConfigured] = useState<boolean | null>(null);
   const sseRef = useRef<EventSource | null>(null);
 
   const getSentIds = (): string[] => {
@@ -95,34 +96,55 @@ export default function DashboardPage() {
     load();
     window.addEventListener('focus', load);
 
-    // --- Server-Sent Events for real-time push ---
-    setLiveStatus('connecting');
-    const es = new EventSource('/api/emails/replies-stream');
-    sseRef.current = es;
+    // --- Check SMTP config first ---
+    const token = localStorage.getItem('authToken');
+    fetch('/api/user/smtp-config', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    })
+      .then(r => r.json())
+      .then(data => {
+        const configured = !!data.config;
+        setSmtpConfigured(configured);
 
-    es.onopen = () => setLiveStatus('live');
-    es.onerror = () => setLiveStatus('polling');
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data);
-        if (data.type === 'reply' && data.emailId) {
-          applyReply(data.emailId);
-        } else if (data.type === 'snapshot') {
-          const ids = getSentIds();
-          ids.forEach(id => { if (data.replies?.[id]) applyReply(id); });
-          load();
+        if (!configured) {
+          // No SMTP → don't start SSE, show not connected
+          return;
         }
-      } catch {}
-    };
 
-    // --- Polling fallback every 30 s ---
-    pollReplies();
-    const pollInterval = setInterval(pollReplies, 30_000);
+        // --- Server-Sent Events for real-time push (only if SMTP configured) ---
+        setLiveStatus('connecting');
+        const es = new EventSource('/api/emails/replies-stream');
+        sseRef.current = es;
+
+        es.onopen = () => setLiveStatus('live');
+        es.onerror = () => setLiveStatus('polling');
+        es.onmessage = (e) => {
+          try {
+            const data = JSON.parse(e.data);
+            if (data.type === 'reply' && data.emailId) {
+              applyReply(data.emailId);
+            } else if (data.type === 'snapshot') {
+              const ids = getSentIds();
+              ids.forEach(id => { if (data.replies?.[id]) applyReply(id); });
+              load();
+            }
+          } catch {}
+        };
+
+        // --- Polling fallback every 30 s ---
+        pollReplies();
+        const pollInterval = setInterval(pollReplies, 30_000);
+        // Store pollInterval for cleanup via closure
+        (es as any)._pollInterval = pollInterval;
+      })
+      .catch(() => setSmtpConfigured(false));
 
     return () => {
       window.removeEventListener('focus', load);
-      es.close();
-      clearInterval(pollInterval);
+      if (sseRef.current) {
+        clearInterval((sseRef.current as any)._pollInterval);
+        sseRef.current.close();
+      }
       setLiveStatus('off');
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -139,12 +161,21 @@ export default function DashboardPage() {
   const liveLabel = liveStatus === 'live' ? '● Live' : liveStatus === 'connecting' ? '○ Connexion...' : liveStatus === 'polling' ? '↻ Polling 30s' : '';
   const liveColor = liveStatus === 'live' ? '#16a34a' : liveStatus === 'connecting' ? '#d97706' : '#6366f1';
 
+  // SMTP badge overrides live status when not configured
+  const smtpBadge = smtpConfigured === false
+    ? { label: '⚠ SMTP non configuré', color: '#dc2626', bg: '#fef2f2' }
+    : null;
+
   return (
     <div style={{ padding: '2.5rem', fontFamily: '"Helvetica Neue", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '2.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
           <h1 style={{ fontSize: '2rem', fontWeight: '300', letterSpacing: '-0.5px', color: '#0f172a' }}>Tableau de Bord</h1>
-          {liveStatus !== 'off' && (
+          {smtpBadge ? (
+            <a href="/dashboard/settings/email" style={{ fontSize: '0.7rem', fontWeight: '600', color: smtpBadge.color, background: smtpBadge.bg, padding: '0.375rem 0.75rem', borderRadius: '99px', letterSpacing: '0.3px', textDecoration: 'none', border: '1px solid #fecaca' }}>
+              {smtpBadge.label}
+            </a>
+          ) : liveStatus !== 'off' && (
             <span style={{ fontSize: '0.7rem', fontWeight: '600', color: liveColor, background: liveStatus === 'live' ? '#dcfce7' : '#fef9c3', padding: '0.375rem 0.75rem', borderRadius: '99px', letterSpacing: '0.3px' }}>
               {liveLabel}
             </span>
