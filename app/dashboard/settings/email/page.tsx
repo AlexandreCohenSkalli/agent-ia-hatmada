@@ -186,7 +186,7 @@ export default function EmailSettingsPage() {
       const res = await fetch('/api/user/smtp-config', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, body: JSON.stringify(form) });
       const data = await res.json();
       if (res.ok) { setHasConfig(true); setSaved(true); setTimeout(() => setSaved(false), 2500); }
-      else setMessage({ type: 'error', text: data.error || 'Erreur lors de la sauvegarde' });
+      else setMessage({ type: 'error', text: data.error + (data.details ? ` — ${data.details}` : '') });
     } catch { setMessage({ type: 'error', text: 'Erreur réseau' }); }
     finally { setSaving(false); }
   };

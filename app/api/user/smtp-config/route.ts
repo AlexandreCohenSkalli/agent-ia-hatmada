@@ -40,19 +40,50 @@ export async function POST(request: NextRequest) {
   const userId = getUserIdFromRequest(request);
   if (!userId) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
 
-  const { host, port, secure, smtpUser, smtpPass, fromName, senderEmail } = await request.json();
-
-  if (!host || !port || !smtpUser || !smtpPass || !senderEmail) {
-    return NextResponse.json({ error: 'Champs requis manquants' }, { status: 400 });
+  let body: any;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json({ error: 'Corps de requête invalide' }, { status: 400 });
   }
 
-  const config = await prisma.smtpConfig.upsert({
-    where: { userId },
-    update: { host, port: parseInt(port), secure: !!secure, smtpUser, smtpPass, fromName, senderEmail },
-    create: { userId, host, port: parseInt(port), secure: !!secure, smtpUser, smtpPass, fromName, senderEmail },
-  });
+  const { host, port, secure, smtpUser, smtpPass, fromName, senderEmail } = body;
 
-  return NextResponse.json({ success: true, configId: config.id });
+  // If updating an existing config, password can be omitted (keep current)
+  const existing = await prisma.smtpConfig.findUnique({ where: { userId } }).catch(() => null);
+
+  if (!host || !port || !smtpUser || !senderEmail) {
+    return NextResponse.json({ error: 'Champs requis manquants (host, port, smtpUser, senderEmail)' }, { status: 400 });
+  }
+
+  // Require password only on first save
+  if (!existing && !smtpPass) {
+    return NextResponse.json({ error: 'Mot de passe SMTP requis pour la première configuration' }, { status: 400 });
+  }
+
+  try {
+    const data: any = {
+      host,
+      port: parseInt(String(port), 10),
+      secure: !!secure,
+      smtpUser,
+      fromName: fromName || '',
+      senderEmail,
+    };
+    // Only update password if a new one is provided
+    if (smtpPass) data.smtpPass = smtpPass;
+
+    const config = await prisma.smtpConfig.upsert({
+      where: { userId },
+      update: data,
+      create: { userId, ...data, smtpPass: smtpPass || '' },
+    });
+
+    return NextResponse.json({ success: true, configId: config.id });
+  } catch (err: any) {
+    console.error('[SMTP config save error]', err);
+    return NextResponse.json({ error: 'Erreur lors de la sauvegarde', details: String(err?.message || err) }, { status: 500 });
+  }
 }
 
 // DELETE: Remove SMTP config
